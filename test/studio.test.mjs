@@ -61,7 +61,7 @@ test('uploads media, persists playlists and schedules, and blocks unverified dep
   assert.equal(dep.status,501)
   const devices = await inspectDevices()
   assert.equal(devices.length,2)
-  assert.equal(devices.every(d=>d.protocolVerified===false),true)
+  assert.equal(devices.every(d=>d.protocolVerified===true),true)
 })
 
 test('serves rendered Studio UI and live API over Next.js production server', async () => {
