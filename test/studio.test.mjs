@@ -7,7 +7,15 @@ import path from 'node:path'
 
 const dir = await mkdtemp(path.join(os.tmpdir(),'novods-test-'))
 process.env.NOVODS_DATA_DIR = dir
-const {encodeFrame,decodeFrame,inspectDevices} = await import('../lib/protocol.mjs')
+const {encodeFrame,decodeFrame,inspectDevices,parseSnapshot} = await import('../lib/protocol.mjs')
+
+test('parseSnapshot frames native JPEG reply',()=>{
+  const jpeg=Buffer.from('ffd8ffe0aabb','hex'), msg=Buffer.concat([Buffer.from([0,0,0,8+jpeg.length,0x52,0,1,0]),jpeg])
+  assert.equal(parseSnapshot(msg.subarray(0,10)),undefined)
+  assert.deepEqual(parseSnapshot(msg),jpeg)
+  assert.throws(()=>parseSnapshot(Buffer.from([0,0,0,9,0x41,0,0,0,0])),/Unexpected/)
+  assert.throws(()=>parseSnapshot(Buffer.from([0xff,0,0,0,0x52,0,0,0])),/length/)
+})
 const studio = await import('../app/api/studio/route.js')
 const media = await import('../app/api/media/route.js')
 const mediaFile = await import('../app/api/media/[file]/route.js')
