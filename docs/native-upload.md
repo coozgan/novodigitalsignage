@@ -12,6 +12,8 @@ SHA256: `81a86e4afae79d9a012f451833f4c904f5cc1997c31c726214c46ec30b08b543`
 
 ## Remaining work
 
+Implemented `uploadKey` from assembly, without connecting it to deployment routes. Caller evidence `ev_f8c0a4e1396c4f9dfa5733a64d64ac3ba134dbf2ccb3b3d8057e181565691b0d` identifies trimmed DeviceTCP::getDeviceName and DeviceTCP::getDeviceBspVersion as the two inputs. Setter assembly `ev_4dc3a8fd53b448c625463dc0f5e69e059c558eeed9907c477ec41fe2509b10ee` stores arguments in that order at +0x90/+0x98. Tests use a hand-calculated seed-1 mask, all six final operations, whitespace trimming, UTF-16 filename length and invalid inputs. These are static-derived checks, not captured native ciphertext or live-device acceptance.
+
 Key assembly `ev_f96cc2047084211d1e10bcc29de51a8db58db4dbd25e8ed5ef4132ed33f816c7` and switch-table bytes `ev_042faab1866d17a1792acbb0074de7f0090a03cad865612a0002588bc46d1ae2` resolve the final operation by original key byte modulo six: 0 add mask, 1 absolute difference, 2 unchanged, 3 replace with mask, 4 multiply mask, 5 XOR mask (all byte-truncated). Table at 0x1002b660c: `38ffffff42ffffff07fffffffefeffff54ffffff5effffff`.
 
 Initial key fill is `key[(seed+i)&31] = firstUtf8[i % firstUtf8.length]`. Second fill multiplies each byte by repeated second-string bytes, with a separate rotated index. Mask assembly has three branches selected by `(floor(seed/1000)+iteration)%3`. Preserve unsigned 32-bit arithmetic and bitwise NOT, not logical negation. Full algorithm still needs independent vectors before integration.

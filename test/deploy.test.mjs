@@ -2,10 +2,20 @@ import assert from 'node:assert/strict'
 import net from 'node:net'
 import {once} from 'node:events'
 import {createDecipheriv} from 'node:crypto'
-import {uploadIV,uploadHeader,uploadChunks,parseUploadAcknowledgement,transferFile,openUploadControl,deployPlaylistSession,deployScheduleSession} from '../lib/deploy.mjs'
+import {uploadKey,uploadIV,uploadHeader,uploadChunks,parseUploadAcknowledgement,transferFile,openUploadControl,deployPlaylistSession,deployScheduleSession} from '../lib/deploy.mjs'
 import {encodeFrame,decodeFrame} from '../lib/protocol.mjs'
 
 const key=Buffer.alloc(32,7),iv=Buffer.alloc(16,3)
+// Hand-derived mask for seed 1: words 1,1111,1,1 in rotated slots.
+const mask=Buffer.from('010000005704000000000001ff01ff000000000000022b00ff0000ffff00ff00','hex')
+assert.deepEqual(uploadKey('x','c','!'),mask) // 99*33 mod 256 = 195, operation 3.
+for(let k=0;k<6;k++) {
+  const expected=Buffer.from([...mask].map(m=>[k+m,Math.abs(k-m),k,m,k*m,k^m][k]))
+  assert.deepEqual(uploadKey('x',String.fromCharCode(k),'\u0001'),expected)
+}
+assert.deepEqual(uploadKey('x',' c ',' ! '),mask)
+assert.deepEqual(uploadKey('😀','c','!'),uploadKey('xx','c','!'))
+for(const args of [['','a','b'],['../x','a','b'],['x','','b'],['x','a',' '],['x'.repeat(129),'a','b']]) assert.throws(()=>uploadKey(...args))
 assert.equal(uploadIV(0).toString('hex'),'0000000000ff00ffff00ff00ffffffff')
 assert.equal(uploadIV(3600).toString('hex'),'100e000000ef00f1ff0eff10fffff1ef')
 for(const value of [-1,86400,NaN,0.5]) assert.throws(()=>uploadIV(value))
