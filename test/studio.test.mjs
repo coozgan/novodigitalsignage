@@ -25,7 +25,7 @@ test('uploads media, persists playlists and schedules, and blocks unverified dep
   const png = Buffer.from('89504e470d0a1a0a0000000d49484452','hex')
   const form = new FormData()
   form.set('file',new File([png],'poster.png',{type:'image/png'}))
-  const up = await media.POST(new Request('http://127.0.0.1:3000/api/media',{method:'POST',headers:{origin:'http://127.0.0.1:3000'},body:form}))
+  const up = await media.POST(new Request('http://127.0.0.1:3000/api/media',{method:'POST',headers:{origin:'http://localhost:3000'},body:form}))
   assert.equal(up.status,200)
   const {media:uploaded,revision} = await up.json()
   const served = await mediaFile.GET(new Request(`http://127.0.0.1:3000${uploaded.url}`),{params:Promise.resolve({file:uploaded.fileName})})
