@@ -2,10 +2,13 @@ import assert from 'node:assert/strict'
 import net from 'node:net'
 import {once} from 'node:events'
 import {createDecipheriv} from 'node:crypto'
-import {uploadHeader,uploadChunks,parseUploadAcknowledgement,transferFile,openUploadControl,deployPlaylistSession,deployScheduleSession} from '../lib/deploy.mjs'
+import {uploadIV,uploadHeader,uploadChunks,parseUploadAcknowledgement,transferFile,openUploadControl,deployPlaylistSession,deployScheduleSession} from '../lib/deploy.mjs'
 import {encodeFrame,decodeFrame} from '../lib/protocol.mjs'
 
 const key=Buffer.alloc(32,7),iv=Buffer.alloc(16,3)
+assert.equal(uploadIV(0).toString('hex'),'0000000000ff00ffff00ff00ffffffff')
+assert.equal(uploadIV(3600).toString('hex'),'100e000000ef00f1ff0eff10fffff1ef')
+for(const value of [-1,86400,NaN,0.5]) assert.throws(()=>uploadIV(value))
 await assert.rejects(deployPlaylistSession({
   control:{request(){assert.fail('Invalid files must not reach the device')}},
   playlistName:'Test',files:[{fileName:'../bad',bytes:Buffer.from('x')}],
