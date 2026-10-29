@@ -24,6 +24,11 @@ await assert.rejects(deployPlaylistSession({
   playlistName:'Test',files:[{fileName:'../bad',bytes:Buffer.from('x')}],
 }),/Invalid native upload filename/)
 assert.equal(uploadHeader('index.xml',17,2,1,3600).toString('hex'),'000000275100020100000e1009696e6465782e786d6c')
+await assert.rejects(deployPlaylistSession({
+  control:{request(){assert.fail('Invalid crypto must not reach device')}},
+  playlistName:'Test',files:[{fileName:'x',bytes:Buffer.from('x')}],
+  deriveKey:()=>Buffer.alloc(1),deriveIV:()=>iv,
+}),/Invalid native upload key or IV/)
 for(const name of ['../x','a/b','a\\b','bad\nname','x'.repeat(129)]) assert.throws(()=>uploadHeader(name,17,1,1,0))
 assert.throws(()=>uploadHeader('x',0,1,1,0))
 assert.throws(()=>uploadHeader('x',1,256,1,0))
