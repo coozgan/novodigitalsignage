@@ -7,7 +7,7 @@ import path from 'node:path'
 
 const dir = await mkdtemp(path.join(os.tmpdir(),'novods-test-'))
 process.env.NOVODS_DATA_DIR = dir
-const {encodeFrame,decodeFrame,inspectDevices,parseSnapshot} = await import('../lib/protocol.mjs')
+const {encodeFrame,decodeFrame,inspectDevices,parseSnapshot,parsePush} = await import('../lib/protocol.mjs')
 
 test('parseSnapshot frames native JPEG reply',()=>{
   const jpeg=Buffer.from('ffd8ffe0aabb','hex'), msg=Buffer.concat([Buffer.from([0,0,0,8+jpeg.length,0x52,0,1,0]),jpeg])
@@ -15,6 +15,12 @@ test('parseSnapshot frames native JPEG reply',()=>{
   assert.deepEqual(parseSnapshot(msg),jpeg)
   assert.throws(()=>parseSnapshot(Buffer.from([0,0,0,9,0x41,0,0,0,0])),/Unexpected/)
   assert.throws(()=>parseSnapshot(Buffer.from([0xff,0,0,0,0x52,0,0,0])),/length/)
+})
+test('parsePush frames device-pushed JPEG',()=>{
+  const jpeg=Buffer.from('ffd8ffe0aabbffd9','hex'), msg=Buffer.concat([Buffer.from([1,0x75,0,0,0,jpeg.length]),jpeg])
+  assert.equal(parsePush(msg.subarray(0,9)),undefined)
+  assert.deepEqual(parsePush(msg),jpeg)
+  assert.throws(()=>parsePush(Buffer.from([1,0x75,0,0,0,3,0,0,0])),/JPEG/)
 })
 const studio = await import('../app/api/studio/route.js')
 const media = await import('../app/api/media/route.js')
