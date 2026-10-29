@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {mkdtemp,rm} from 'node:fs/promises'
+import {spawn} from 'node:child_process'
 import os from 'node:os'
 import path from 'node:path'
 
@@ -47,4 +48,28 @@ test('uploads media, persists playlists and schedules, and blocks unverified dep
   const devices = await inspectDevices()
   assert.equal(devices.length,2)
   assert.equal(devices.every(d=>d.protocolVerified===false),true)
+})
+
+test('serves rendered Studio UI and live API over Next.js production server', async () => {
+  const port = 3456
+  const base = `http://127.0.0.1:${port}`
+  const server = spawn('npx',['next','start','-p',String(port),'--hostname','127.0.0.1'],{env:{...process.env,NOVODS_DATA_DIR:dir},stdio:'ignore'})
+  try {
+    let html = ''
+    for (let i = 0; i < 30; i++) {
+      try {
+        const res = await fetch(base)
+        if (res.ok) { html = await res.text(); break }
+      } catch {}
+      await new Promise(r=>setTimeout(r,200))
+    }
+    assert.match(html,/NovoDS/)
+    assert.match(html,/Your display network/)
+    const devRes = await (await fetch(`${base}/api/devices`)).json()
+    assert.equal(devRes.devices.length,2)
+    assert.equal(devRes.devices.some(d=>d.ip==='192.168.80.128' && d.reachable),true)
+    assert.equal(devRes.devices.some(d=>d.ip==='192.168.80.100' && d.reachable),true)
+  } finally {
+    server.kill('SIGTERM')
+  }
 })
