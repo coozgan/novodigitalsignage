@@ -1,0 +1,6 @@
+node_modules/
+.next/
+data/
+.DS_Store
+.jcode/
+*.log
