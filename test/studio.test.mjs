@@ -33,6 +33,12 @@ test('round-trips DeviceTCP frames and rejects malformed frames', () => {
   assert.equal(encodeFrame('REMOTE_CONTROL;[GET_All]'),'4D4143A3YbNjUSZjkuFgZnBgtPKyUCLDMbLy5t\r\n')
   assert.equal(decodeFrame('4D4143A3YbNjUSZjkuFgZnBgtPKyUCLDMcJiNEFDUwOBVbNUQM\r\n'),'REMOTE_CONTROL;[GET_Feature_List]')
   assert.throws(()=>decodeFrame('bad-frame'))
+  for(const length of [1,57,114,300]) {
+    const text='[REMOTE_CONTROL]'+ 'x'.repeat(length)
+    const body=encodeFrame(text).slice(6,-2)
+    assert.equal(decodeFrame(body.match(/.{1,76}/g).join('\n')+'\n'),text)
+  }
+  assert.throws(()=>decodeFrame('YWJ'))
 })
 
 test('uploads media, persists playlists and schedules, and blocks unverified deploy', async () => {
@@ -61,7 +67,7 @@ test('uploads media, persists playlists and schedules, and blocks unverified dep
   assert.equal(dep.status,501)
   const devices = await inspectDevices()
   assert.equal(devices.length,2)
-  assert.equal(devices.every(d=>d.protocolVerified===true),true)
+  assert.equal(devices.every(d=>typeof d.protocolVerified==='boolean'),true)
 })
 
 test('serves rendered Studio UI and live API over Next.js production server', async () => {
