@@ -74,14 +74,14 @@ test('persistent registry and public device endpoints without hardware traffic',
     t.mock.method(dgram,'createSocket',()=> {
       const socket=new EventEmitter()
       socket.bind=(_port,callback)=>callback()
-      socket.close=()=>{}
+      socket.close=callback=>callback?.()
       socket.send=(bytes,port,ip,callback)=>{packets.push({port,ip});callback?.()}
       return socket
     })
     t.mock.method(net,'createServer',()=> {
       const server=new EventEmitter()
       server.listen=(_port,callback)=>callback()
-      server.close=()=>{}
+      server.close=callback=>callback?.()
       return server
     })
     try {
