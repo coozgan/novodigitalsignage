@@ -167,6 +167,8 @@ h2, h3, p { margin: 0; }
 .device-visual { padding: 18px 18px 8px; border-radius: 12px; background: radial-gradient(circle at 50% 0%, #1d283a, #121215 72%); display: grid; place-items: center; }
 .display-frame { width: min(280px, 100%); aspect-ratio: 16 / 9; border-radius: 10px; padding: 7px; background: #27272c; position: relative; box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45); }
 .display-screen { height: 100%; border-radius: 6px; background: #0c0d10; border: 1px solid var(--line); display: grid; place-content: center; text-align: center; position: relative; overflow: hidden; }
+.remote-snapshot { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.snapshot-status { font-size: 11px; color: var(--muted); margin: 6px 0 14px; overflow-wrap: anywhere; }
 .screen-logo { font-weight: 700; font-size: 20px; }
 .screen-logo span { color: var(--accent); }
 .screen-subtitle, .screen-index { color: var(--dim); font-size: 11px; }

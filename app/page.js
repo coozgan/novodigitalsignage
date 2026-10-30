@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import DeviceControls from './DeviceControls';
+import DeviceSnapshot from './DeviceSnapshot';
 
 const tabs = ['Devices', 'Library', 'Playlists', 'Schedules'];
 const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -45,12 +46,15 @@ function Preview({ media, controls = false }) {
 }
 
 export default function Studio() {
-  // ponytail: local component state covers two DS200 devices; upgrade to external store if multi-user sync is added.
+  // ponytail: component state covers this local workspace; add multi-user sync only when needed.
   const [tab, setTab] = useState('Devices');
   const [studio, setStudio] = useState(emptyStudio);
   const [loaded, setLoaded] = useState(false);
   const [devices, setDevices] = useState([]);
   const [deviceLoaded, setDeviceLoaded] = useState(false);
+  const [snapshotRefresh, setSnapshotRefresh] = useState(0);
+  const [addingDevice, setAddingDevice] = useState(false);
+  const [newDevice, setNewDevice] = useState({name:'',ip:''});
   const [selected, setSelected] = useState([]);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
@@ -73,7 +77,7 @@ export default function Studio() {
     try {
       const data = await request('/api/devices');
       if (!Array.isArray(data.devices)) throw new Error('Device response is missing the devices list.');
-      setDevices(data.devices); setDeviceLoaded(true);
+      setDevices(data.devices); setDeviceLoaded(true); setSnapshotRefresh(value => value + 1);
       setSelected(current => current.filter(id => data.devices.some(device => device.id === id)));
     } catch (err) { setError(`Could not discover devices: ${err.message}`); }
   }
@@ -120,8 +124,8 @@ export default function Studio() {
     if (!file) return;
     run('Uploading', async () => {
       if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) throw new Error('Choose an image or video file.');
-      const body = new FormData(); body.append('file', file);
-      const result = await request('/api/media', { method: 'POST', body });
+      if (file.size > 1024 ** 3) throw new Error('Media must be 1 GiB or smaller.');
+      const result = await request('/api/media', { method: 'POST', headers: {'Content-Type':file.type || 'application/octet-stream','X-File-Name':encodeURIComponent(file.name)}, body:file });
       const media = result.media || result;
       if (!media.id || !media.url || !media.name) throw new Error('Upload response is missing media details.');
       setStudio(current => ({ ...current, revision: result.revision ?? current.revision, media: [...current.media.filter(item => item.id !== media.id), media] }));
@@ -130,7 +134,7 @@ export default function Studio() {
   }
   const verified = devices.length > 0 && devices.every(device => device.protocolVerified);
   const filteredMedia = studio.media.filter(media => media.name.toLowerCase().includes(search.toLowerCase()));
-  const heading = { Devices: ['Your display network', 'Two DS200 players. One considered workspace.'], Library: ['A home for your content', 'Upload images and videos, then bring them into a playlist.'], Playlists: ['Make every frame count', 'Arrange your media into a precise playback sequence.'], Schedules: ['The right content, on time', 'Plan recurring playback for your display network.'] }[tab];
+  const heading = { Devices: ['Your display network', 'Manage your signage players in one workspace.'], Library: ['A home for your content', 'Upload images and videos up to 1 GiB per file. Player limits depend on device support.'], Playlists: ['Make every frame count', 'Arrange your media into a precise playback sequence.'], Schedules: ['The right content, on time', 'Plan recurring playback for your display network.'] }[tab];
 
   return <div className="app-shell">
     <aside className="sidebar">
@@ -148,11 +152,12 @@ export default function Studio() {
         {notice && <div role="status" className="message success">{notice}<button onClick={() => setNotice('')} aria-label="Dismiss notification">×</button></div>}
         {!loaded && <div className="load-notice">Studio data is not loaded. Editing is unavailable until the API responds. <button disabled={!!busy} onClick={() => run('Loading', loadStudio)}>Retry studio</button></div>}
         {tab === 'Devices' && <>
-          <section className="fleet-summary" aria-label="Fleet summary"><div><span className="summary-icon"><Icon name="Devices" size={23}/></span><div><span>Display players</span><strong>{deviceLoaded ? devices.length : '…'} <small>/ 2 expected</small></strong></div></div><div><span className="status-dot green-dot"/><div><span>Reachable</span><strong>{deviceLoaded ? devices.filter(device => device.reachable).length : '…'} <small>on the network</small></strong></div></div><div><span className="status-dot amber-dot"/><div><span>Protocol verified</span><strong>{deviceLoaded ? devices.filter(device => device.protocolVerified).length : '…'} <small>responding to status queries</small></strong></div></div></section>
+          <button className="primary" disabled={!!busy} onClick={() => {setNewDevice({name:'',ip:''});setAddingDevice(true);}}>+ Add device</button>
+          <section className="fleet-summary" aria-label="Fleet summary"><div><span className="summary-icon"><Icon name="Devices" size={23}/></span><div><span>Display players</span><strong>{deviceLoaded ? devices.length : '…'} <small>configured</small></strong></div></div><div><span className="status-dot green-dot"/><div><span>Reachable</span><strong>{deviceLoaded ? devices.filter(device => device.reachable).length : '…'} <small>on the network</small></strong></div></div><div><span className="status-dot amber-dot"/><div><span>Protocol verified</span><strong>{deviceLoaded ? devices.filter(device => device.protocolVerified).length : '…'} <small>responding to status queries</small></strong></div></div></section>
           <div className="section-heading"><h2>Connected devices <span>{devices.length}</span></h2><span className="muted">Live device discovery</span></div>
           <div className="device-grid">{devices.map((device, index) => <article className={`device-card ${selected.includes(device.id) ? 'selected' : ''}`} key={device.id}>
             <div className="device-card-top"><span className={`badge ${device.reachable ? 'green' : 'neutral'}`}><span className={`status-dot ${device.reachable ? 'green-dot' : ''}`}/>{device.reachable ? 'Reachable' : 'Unreachable'}</span><label className="select-device"><input type="checkbox" aria-label={`Select ${device.name}`} checked={selected.includes(device.id)} onChange={event => setSelected(current => event.target.checked ? [...current, device.id] : current.filter(id => id !== device.id))}/>Select</label></div>
-            <div className="device-visual" aria-hidden="true"><div className="display-frame"><div className="display-screen"><span className="screen-grid"/><div className="screen-logo">Novo<span>DS</span></div><span className="screen-subtitle">Digital signage player</span><span className="screen-index">DS200 / {String(index + 1).padStart(2, '0')}</span></div><span className="display-led"/></div><div className="display-stand"/></div>
+            <DeviceSnapshot device={device} refresh={snapshotRefresh}/>
             <div className="device-info"><h3>{device.name}</h3><span className="device-model">{device.model || 'DS200'}</span></div><div className="device-address"><span>IP address</span><code>{device.ip || 'Not provided'}</code></div><div className="device-address"><span>Native protocol</span><span className={device.protocolVerified ? 'green-text' : 'amber-text'}>{device.protocolVerified ? 'Verified' : 'Unverified'}</span></div><p className="device-detail">{typeof device.detail === 'string' ? device.detail : device.detail ? JSON.stringify(device.detail) : 'Read-only queries are available. Deployment requires protocol verification.'}</p>
             <div className="device-actions"><a className="button" href={`/api/devices/screenshot?deviceId=${encodeURIComponent(device.id)}`} target="_blank" rel="noreferrer">Screenshot</a>{['status', 'playlists'].map(action => <button key={action} disabled={!!busy} onClick={() => run('Reading device', async () => { const data = await request('/api/devices', json({ deviceId: device.id, action })); setReading({ title: `${device.name}: ${action}`, data }); })}>{action === 'status' ? 'Read status' : 'Read playlists'}<Icon name="arrow" size={15}/></button>)}</div>
             <DeviceControls device={device} onChanged={loadDevices}/>
@@ -172,6 +177,7 @@ export default function Studio() {
         <footer><span>NovoDS Studio</span><span>Built for your DS200 display network</span></footer>
       </main>
     </div>
+    {addingDevice && <Modal title="Add device" onClose={() => {if(!busy) setAddingDevice(false);}}><form onSubmit={event => {event.preventDefault();run('Adding device',async () => {await request('/api/devices',json({action:'add',...newDevice}));setAddingDevice(false);await loadDevices();setNotice('Device added to your workspace.');});}}><fieldset disabled={!!busy}><label>Device name<input required maxLength={200} value={newDevice.name} onChange={event => setNewDevice(value => ({...value,name:event.target.value}))}/></label><label>IP address<input required placeholder="192.168.1.100" value={newDevice.ip} onChange={event => setNewDevice(value => ({...value,ip:event.target.value}))}/></label>{error && <p role="alert" className="form-error">{error}</p>}<div className="modal-actions"><button type="button" onClick={() => setAddingDevice(false)}>Cancel</button><button className="primary" type="submit">{busy?'Adding…':'Add device'}</button></div></fieldset></form></Modal>}
     {preview && <Modal title={preview.name} onClose={() => setPreview(null)}><div className="large-preview"><Preview media={preview} controls/></div><p className="muted">{preview.type} · {bytes(preview.size)}</p></Modal>}
     {reading && <Modal title={reading.title} onClose={() => setReading(null)}><p className="muted">Live read-only response from the device API.</p><pre className="response-data">{JSON.stringify(reading.data, null, 2)}</pre></Modal>}
     {editor && <Modal title={`${studio[editor.kind === 'playlist' ? 'playlists' : 'schedules'].some(item => item.id === editor.value.id) ? 'Edit' : 'New'} ${editor.kind}`} onClose={() => { if (!busy) setEditor(null); }}><form onSubmit={saveEditor}><fieldset disabled={!!busy}><label>Name<input required maxLength={120} value={editor.value.name} placeholder={editor.kind === 'playlist' ? 'e.g. Welcome display' : 'e.g. Weekday mornings'} onChange={event => patch({ name: event.target.value })}/></label>
