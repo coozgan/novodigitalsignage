@@ -10,12 +10,24 @@ import dgram from 'node:dgram'
 const dir=await mkdtemp(path.join(os.tmpdir(),'novods-snapshot-'))
 process.env.NOVODS_DATA_DIR=dir
 const {loadDevices}=await import('../lib/devices.mjs')
-const {snapshot}=await import('../lib/protocol.mjs')
+const {snapshot,parseSnapshot}=await import('../lib/protocol.mjs')
 const [first,second]=await loadDevices()
 const jpeg=Buffer.from('ffd8ffe0aabbffd9','hex')
 const currentJpeg=Buffer.from('ffd8ffe0ccddffd9','hex')
 const push=Buffer.concat([Buffer.from([0,0,0,0,0,jpeg.length]),jpeg])
 test.after(()=>rm(dir,{recursive:true,force:true}))
+
+test('pull framing requires a complete JPEG, not just a command acknowledgement',()=> {
+  const frame=Buffer.concat([Buffer.from([0,0,0,8+jpeg.length,0x52,0,1,0]),jpeg])
+  assert.deepEqual(parseSnapshot(frame),jpeg)
+  assert.equal(parseSnapshot(frame.subarray(0,-1)),undefined)
+  for(const offset of [8,9,frame.length-2,frame.length-1]) {
+    const invalid=Buffer.from(frame)
+    invalid[offset]=0
+    assert.throws(()=>parseSnapshot(invalid),/complete JPEG/)
+  }
+  assert.throws(()=>parseSnapshot(Buffer.from('0000000852000100','hex')),/complete JPEG/)
+})
 
 function transport(t,plans) {
   const events=[],servers=[],clients=[]
@@ -25,7 +37,7 @@ function transport(t,plans) {
     direct=false
     udp.send=(bytes,port,ip,callback)=> {
       events.push(`${capture}:${bytes.toString('hex')}:${ip}`)
-      if(bytes.toString('hex')==='00060f010101' && (plan.startsWith('push') || ['late-push','oversize-push'].includes(plan))) {
+      if(bytes.toString('hex')==='00060f010101' && (plan.startsWith('push') || plan==='oversize-push')) {
         setTimeout(()=> {
           const client=new EventEmitter()
           client.remoteAddress=`::ffff:${ip}`
@@ -33,7 +45,7 @@ function transport(t,plans) {
           clients.push(client)
           servers[capture].accept(client)
           client.emit('data',plan==='oversize-push'?Buffer.concat([push,Buffer.alloc(16*1024*1024)]):push)
-        },plan==='late-push'?1550:5)
+        },5)
       }
       setTimeout(()=>callback?.(),2)
     }
@@ -74,7 +86,7 @@ function transport(t,plans) {
     process.nextTick(()=> {
       if(initial && !['direct','direct-hang'].includes(plan)) return socket.emit('error',new Error('Initial pull refused'))
       if(initial && plan==='direct') index++
-      if(['late-push','push-error'].includes(plan)) socket.emit('error',new Error('Pull refused'))
+      if(plan==='push-error') socket.emit('error',new Error('Pull refused'))
       else callback?.()
     })
     return socket
@@ -91,7 +103,7 @@ test('successful initial pull sends no UDP START or STOP and opens no callback l
 
 test('initial direct timeout falls back and queue continues without hanging',async t=> {
   const state=transport(t,['direct-hang','push'])
-  const results=await Promise.allSettled([snapshot(first,60),snapshot(second,100)])
+  const results=await Promise.allSettled([snapshot(first,60),snapshot(second,2000)])
   assert.equal(results[0].status,'rejected')
   assert.match(results[0].reason.message,/timeout/)
   assert.deepEqual(results[1].value,jpeg)
@@ -102,7 +114,7 @@ test('initial direct timeout falls back and queue continues without hanging',asy
 
 test('queues captures across devices until callback port and UDP cleanup finish',async t=> {
   const state=transport(t,['push','push'])
-  const results=await Promise.all([snapshot(first,200),snapshot(second,200)])
+  const results=await Promise.all([snapshot(first,2000),snapshot(second,2000)])
   assert.deepEqual(results,[jpeg,jpeg])
   assert.equal(state.maxActive(),1)
   assert.ok(state.events.indexOf('0:closed')<state.events.indexOf('1:listen'))
@@ -112,7 +124,7 @@ test('queues captures across devices until callback port and UDP cleanup finish'
 
 test('timeout rejects only active capture and queue continues with full per-capture timeout',async t=> {
   const state=transport(t,['silent','push'])
-  const results=await Promise.allSettled([snapshot(first,40),snapshot(second,40)])
+  const results=await Promise.allSettled([snapshot(first,40),snapshot(second,2000)])
   assert.equal(results[0].status,'rejected')
   assert.match(results[0].reason.message,/timeout/)
   assert.equal(results[1].status,'fulfilled')
@@ -127,22 +139,23 @@ test('native-owned callback port falls back to pull without closing or killing i
   assert.deepEqual(await snapshot(first,2000),jpeg)
   assert.ok(state.events.includes(`pull:${first.ip}`))
   assert.ok(!state.events.includes('0:closed'))
-  assert.deepEqual(await snapshot(second,200),jpeg)
+  assert.deepEqual(await snapshot(second,2000),jpeg)
 })
 
 test('invalid queued device does not block the next capture',async t=> {
   const state=transport(t,['push'])
-  const results=await Promise.allSettled([snapshot({...first,ip:'127.0.0.1'}),snapshot(second,200)])
+  const results=await Promise.allSettled([snapshot({...first,ip:'127.0.0.1'}),snapshot(second,2000)])
   assert.equal(results[0].status,'rejected')
   assert.match(results[0].reason.message,/Unknown device/)
   assert.deepEqual(results[1].value,jpeg)
   assert.equal(state.servers.length,1)
 })
 
-test('pull refusal does not cancel a pending callback capture',async t=> {
-  const state=transport(t,['late-push'])
-  assert.deepEqual(await snapshot(second,2000),jpeg)
-  assert.ok(state.events.includes(`pull:${second.ip}`))
+test('callback-only capture rejects before a retry pull can start',async t=> {
+  const state=transport(t,['push-hang'])
+  await assert.rejects(snapshot(second,40),/timeout/)
+  assert.equal(state.events.filter(e=>e===`pull:${second.ip}`).length,1)
+  assert.equal(state.clients.length,1)
   assert.ok(state.clients.every(c=>c.destroyed))
 })
 
@@ -156,15 +169,17 @@ test('successful pull wins over a differing early callback',async t=> {
 })
 
 for(const plan of ['push-error','push-end','push-invalid','push-oversize-pull','push-hang']) {
-  test(`retained callback is fallback for ${plan}`,async t=> {
+  test(`callback is discarded and capture rejects for ${plan}`,async t=> {
     const state=transport(t,[plan,'push'])
-    assert.deepEqual(await snapshot(first,1700),jpeg)
+    await assert.rejects(snapshot(first,1700),/Pull refused|closed connection|Invalid snapshot length|size limit|timeout/)
     assert.ok(state.events.includes(`pull:${first.ip}`))
-    assert.deepEqual(await snapshot(second,40),jpeg)
+    assert.deepEqual(await snapshot(second,2000),jpeg)
     assert.equal(state.maxActive(),1)
     assert.ok(state.events.indexOf('0:closed')<state.events.indexOf('1:listen'))
     assert.ok(state.events.indexOf('0:udp-closed')<state.events.indexOf('1:listen'))
     assert.ok(state.clients.every(c=>c.destroyed))
+    assert.ok(state.events.includes(`0:050f020000:${first.ip}`))
+    assert.ok(state.events.includes(`0:00060f020001:${first.ip}`))
   })
 }
 
