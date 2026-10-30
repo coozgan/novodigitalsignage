@@ -69,6 +69,7 @@ export default function Studio() {
   const [deploy, setDeploy] = useState(null);
   const [reading, setReading] = useState(null);
   const [removingDevice, setRemovingDevice] = useState(null);
+  const [deletingItem, setDeletingItem] = useState(null);
   const fileInput = useRef(null);
 
   async function loadStudio() {
@@ -178,14 +179,14 @@ export default function Studio() {
           <div className="media-grid">{filteredMedia.map(media => <button className="media-card" key={media.id} onClick={() => setPreview(media)}><div className="media-thumb"><Preview media={media}/><span className="media-type">{media.type === 'video' || media.type?.startsWith('video/') ? 'Video' : 'Image'}</span></div><div className="media-meta"><strong>{media.name}</strong><span>{bytes(media.size)}<span>Preview ↗</span></span></div></button>)}</div>
           {!filteredMedia.length && <p className="muted empty-caption">{search ? 'No media matches your search.' : 'Your library is empty. Upload your first asset to get started.'}</p>}
         </>}
-        {tab === 'Playlists' && <div className="collection-grid">{studio.playlists.map(list => <article className="collection-card" key={list.id}><div className="collection-art"><Icon name="Playlists" size={32}/><span>{list.width} × {list.height}</span></div><div className="collection-body"><h3>{list.name}</h3><p>{list.items.length} items · {list.items.reduce((sum, item) => sum + item.duration, 0)} seconds</p><ol className="mini-sequence">{list.items.slice(0, 3).map((item, index) => <li key={index}>{studio.media.find(media => media.id === item.mediaId)?.name || 'Missing media'}<span>{item.duration}s</span></li>)}</ol><div className="card-actions"><button disabled={!!busy} onClick={() => newEditor('playlist', list)}>Edit playlist</button><button className="primary" disabled={!!busy} onClick={() => setDeploy({ kind: 'playlist', item: list })}>Publish<Icon name="arrow" size={15}/></button></div></div></article>)}{!studio.playlists.length && <div className="empty-state"><Icon name="Playlists" size={36}/><h3>Your next story starts here</h3><p>Create a playlist, add media, and set the order and duration.</p><button disabled={!loaded || !!busy} onClick={() => newEditor('playlist')}>+ Create playlist</button></div>}</div>}
-        {tab === 'Schedules' && <div className="schedule-list">{studio.schedules.map(schedule => <article className="schedule-card" key={schedule.id}><span className="schedule-icon"><Icon name="Schedules" size={25}/></span><div className="schedule-info"><h3>{schedule.name}</h3><p>{studio.playlists.find(list => list.id === schedule.playlistId)?.name || 'Missing playlist'}</p><div className="schedule-days">{weekdays.map((day, index) => <span key={day} className={schedule.days.includes(index) ? 'enabled' : ''}>{day}</span>)}</div></div><div className="schedule-time"><strong>{schedule.start} <span>–</span> {schedule.end}</strong><small>Recurring · player local time</small></div><div className="card-actions"><button disabled={!!busy} onClick={() => newEditor('schedule', schedule)}>Edit</button><button className="primary" disabled={!!busy} onClick={() => setDeploy({ kind: 'schedule', item: schedule })}>Publish<Icon name="arrow" size={15}/></button></div></article>)}{!studio.schedules.length && <div className="empty-state"><Icon name="Schedules" size={36}/><h3>Give your content a rhythm</h3><p>Create a recurring schedule from a saved playlist.</p><button disabled={!loaded || !!busy} onClick={() => newEditor('schedule')}>+ Create schedule</button></div>}</div>}
+        {tab === 'Playlists' && <div className="collection-grid">{studio.playlists.map(list => <article className="collection-card" key={list.id}><div className="collection-art"><Icon name="Playlists" size={32}/><span>{list.width} × {list.height}</span></div><div className="collection-body"><h3>{list.name}</h3><p>{list.items.length} items · {list.items.reduce((sum, item) => sum + item.duration, 0)} seconds</p><ol className="mini-sequence">{list.items.slice(0, 3).map((item, index) => <li key={index}>{studio.media.find(media => media.id === item.mediaId)?.name || 'Missing media'}<span>{item.duration}s</span></li>)}</ol><div className="card-actions"><button disabled={!!busy} onClick={() => newEditor('playlist', list)}>Edit playlist</button><button disabled={!!busy} onClick={() => { setError(''); setDeletingItem({ kind: 'playlist', item: list }); }}>Delete</button><button className="primary" disabled={!!busy} onClick={() => setDeploy({ kind: 'playlist', item: list })}>Publish<Icon name="arrow" size={15}/></button></div></div></article>)}{!studio.playlists.length && <div className="empty-state"><Icon name="Playlists" size={36}/><h3>Your next story starts here</h3><p>Create a playlist, add media, and set the order and duration.</p><button disabled={!loaded || !!busy} onClick={() => newEditor('playlist')}>+ Create playlist</button></div>}</div>}
+        {tab === 'Schedules' && <div className="schedule-list">{studio.schedules.map(schedule => <article className="schedule-card" key={schedule.id}><span className="schedule-icon"><Icon name="Schedules" size={25}/></span><div className="schedule-info"><h3>{schedule.name}</h3><p>{studio.playlists.find(list => list.id === schedule.playlistId)?.name || 'Missing playlist'}</p><div className="schedule-days">{weekdays.map((day, index) => <span key={day} className={schedule.days.includes(index) ? 'enabled' : ''}>{day}</span>)}</div></div><div className="schedule-time"><strong>{schedule.start} <span>–</span> {schedule.end}</strong><small>Recurring · player local time</small></div><div className="card-actions"><button disabled={!!busy} onClick={() => newEditor('schedule', schedule)}>Edit</button><button disabled={!!busy} onClick={() => { setError(''); setDeletingItem({ kind: 'schedule', item: schedule }); }}>Delete</button><button className="primary" disabled={!!busy} onClick={() => setDeploy({ kind: 'schedule', item: schedule })}>Publish<Icon name="arrow" size={15}/></button></div></article>)}{!studio.schedules.length && <div className="empty-state"><Icon name="Schedules" size={36}/><h3>Give your content a rhythm</h3><p>Create a recurring schedule from a saved playlist.</p><button disabled={!loaded || !!busy} onClick={() => newEditor('schedule')}>+ Create schedule</button></div>}</div>}
         <input ref={fileInput} className="sr-only" type="file" accept="image/*,video/*" aria-label="Upload media file" onChange={upload} disabled={!loaded || !!busy}/>
         <footer><span>NovoDS Studio</span><span>Built for your DS200 display network</span></footer>
       </main>
     </div>
     {addingDevice && <Modal title="Add device" onClose={() => {if(!busy) setAddingDevice(false);}}><form onSubmit={event => {event.preventDefault();run('Adding device',async () => {await request('/api/devices',json({action:'add',...newDevice}));setAddingDevice(false);await loadDevices();setNotice('Device added to your workspace.');});}}><fieldset disabled={!!busy}><label>Device name<input required maxLength={200} value={newDevice.name} onChange={event => setNewDevice(value => ({...value,name:event.target.value}))}/></label><label>IP address<input required placeholder="192.168.1.100" value={newDevice.ip} onChange={event => setNewDevice(value => ({...value,ip:event.target.value}))}/></label>{error && <p role="alert" className="form-error">{error}</p>}<div className="modal-actions"><button type="button" onClick={() => setAddingDevice(false)}>Cancel</button><button className="primary" type="submit">{busy?'Adding…':'Add device'}</button></div></fieldset></form></Modal>}
-    {preview && <Modal title={preview.name} onClose={() => setPreview(null)}><div className="large-preview"><Preview media={preview} controls/></div><p className="muted">{preview.type} · {bytes(preview.size)}</p></Modal>}
+    {preview && <Modal title={preview.name} onClose={() => setPreview(null)}><div className="large-preview"><Preview media={preview} controls/></div><p className="muted">{preview.type} · {bytes(preview.size)}</p><div className="modal-actions"><button disabled={!!busy} onClick={() => { const item = preview; setPreview(null); setError(''); setDeletingItem({ kind: 'media', item }); }}>Delete asset</button><button className="primary" onClick={() => setPreview(null)}>Close</button></div></Modal>}
     {reading && developerMode && <Modal title={reading.title} onClose={() => setReading(null)}><p className="muted">Live read-only response from the device API.</p><pre className="response-data">{JSON.stringify(reading.data, null, 2)}</pre></Modal>}
     {editor && <Modal title={`${studio[editor.kind === 'playlist' ? 'playlists' : 'schedules'].some(item => item.id === editor.value.id) ? 'Edit' : 'New'} ${editor.kind}`} onClose={() => { if (!busy) setEditor(null); }}><form onSubmit={saveEditor}><fieldset disabled={!!busy}><label>Name<input required maxLength={120} value={editor.value.name} placeholder={editor.kind === 'playlist' ? 'e.g. Welcome display' : 'e.g. Weekday mornings'} onChange={event => patch({ name: event.target.value })}/></label>
       {editor.kind === 'playlist' ? <>
@@ -202,6 +203,41 @@ export default function Studio() {
       {error && <p className="form-error" role="alert">{error}</p>}
       <div className="modal-actions"><button type="button" onClick={() => setEditor(null)}>Cancel</button><button className="primary" type="submit">{busy === 'Saving' ? 'Saving…' : `Save ${editor.kind}`}</button></div></fieldset></form></Modal>}
     {removingDevice && <Modal title="Remove device" onClose={() => { if (!busy) setRemovingDevice(null); }}><p>Remove <strong>{removingDevice.name}</strong> from your workspace?</p><p className="muted">Your library, playlists, and schedules stay in the studio. The device can be added again at any time.</p>{error && <p className="form-error" role="alert">{error}</p>}<div className="modal-actions"><button disabled={!!busy} onClick={() => setRemovingDevice(null)}>Keep device</button><button className="primary" disabled={!!busy} onClick={() => run('Removing device', async () => { await request('/api/devices', json({ action: 'remove', deviceId: removingDevice.id, confirmed: true })); setDevices(current => current.filter(device => device.id !== removingDevice.id)); setSelected(current => current.filter(id => id !== removingDevice.id)); setRemovingDevice(null); setNotice(`${removingDevice.name} was removed from your workspace.`); })}>{busy === 'Removing device' ? 'Removing…' : 'Remove from workspace'}</button></div></Modal>}
+    {deletingItem && (() => {
+      const { kind, item } = deletingItem;
+      const blockers = kind === 'playlist'
+        ? studio.schedules.filter(s => s.playlistId === item.id)
+        : kind === 'media'
+        ? studio.playlists.filter(p => p.items?.some(i => i.mediaId === item.id))
+        : [];
+      const isBlocked = blockers.length > 0;
+      return <Modal title={`Delete ${kind === 'media' ? 'media asset' : kind}`} onClose={() => { if (!busy) setDeletingItem(null); }}>
+        <p>Delete <strong>{item.name}</strong> from your workspace?</p>
+        {isBlocked ? (
+          <div role="alert" className="form-error">
+            Cannot delete: referenced by {kind === 'media' ? 'playlist' : 'schedule'}(s): {blockers.map(b => `"${b.name}"`).join(', ')}. Remove it from them first.
+          </div>
+        ) : (
+          <p className="muted">
+            {kind === 'media' ? 'This permanently removes the file from local storage and your library.' : 'This will remove the item from your workspace. Content on devices is unchanged.'}
+          </p>
+        )}
+        {error && <p className="form-error" role="alert">{error}</p>}
+        <div className="modal-actions">
+          <button disabled={!!busy} onClick={() => setDeletingItem(null)}>{isBlocked ? 'Close' : 'Cancel'}</button>
+          {!isBlocked && (
+            <button className="primary" disabled={!!busy} onClick={() => run(`Deleting ${kind}`, async () => {
+              const next = await request('/api/studio', json({ kind, id: item.id, revision: studio.revision, confirmed: true }, 'DELETE'));
+              setStudio(next);
+              setDeletingItem(null);
+              setNotice(`${item.name} was removed from your workspace.`);
+            })}>
+              {busy ? 'Deleting…' : `Delete ${kind}`}
+            </button>
+          )}
+        </div>
+      </Modal>;
+    })()}
     {deploy && <Modal title={deploy.kind === 'playlist' ? 'Publish content' : 'Publish schedule'} onClose={() => { if (!busy) setDeploy(null); }}>
       <fieldset disabled={!!busy} className="deploy-targets"><legend>{deploy.kind === 'playlist' ? 'Choose a playlist' : 'Choose a schedule'}</legend>{deploy.kind === 'playlist'
         ? <label>Playlist<select required value={deploy.item?.id || ''} onChange={event => setDeploy(current => ({ ...current, item: studio.playlists.find(list => list.id === event.target.value) }))}><option value="">{studio.playlists.length ? 'Choose a playlist…' : 'No saved playlists yet'}</option>{studio.playlists.map(list => <option key={list.id} value={list.id}>{list.name}</option>)}</select></label>
