@@ -1,38 +1,53 @@
-import {mkdir,writeFile,unlink} from 'node:fs/promises'
+import {mkdir,rename,unlink} from 'node:fs/promises'
+import {createWriteStream} from 'node:fs'
+import {Readable,Writable} from 'node:stream'
+import {pipeline} from 'node:stream/promises'
 import path from 'node:path'
 import {randomUUID} from 'node:crypto'
 import {dataRoot,transact} from '../../../lib/store.mjs'
 import {mutationGuard,errorResponse} from '../../../lib/http.mjs'
+import {MAX_MEDIA_BYTES,MAX_LEGACY_BYTES,MAX_MULTIPART_BYTES,uploadCounter} from '../../../lib/media.mjs'
 export const runtime='nodejs'
-function sniff(bytes) {
-  if(bytes.subarray(0,8).equals(Buffer.from([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a]))) return ['png','image','image/png']
-  if(bytes[0]===0xff && bytes[1]===0xd8 && bytes[2]===0xff) return ['jpg','image','image/jpeg']
-  if(['GIF87a','GIF89a'].includes(bytes.subarray(0,6).toString('ascii'))) return ['gif','image','image/gif']
-  if(bytes.subarray(0,4).toString('ascii')==='RIFF' && bytes.subarray(8,12).toString('ascii')==='WEBP') return ['webp','image','image/webp']
-  if(bytes.subarray(4,8).toString('ascii')==='ftyp') return ['mp4','video','video/mp4']
-  if(bytes.subarray(0,4).equals(Buffer.from([0x1a,0x45,0xdf,0xa3]))) return ['webm','video','video/webm']
-  throw new Error('Only PNG, JPEG, GIF, WebP, MP4, and WebM media files are supported')
-}
 export async function POST(request) {
+  let tempPath,fullPath
   try {
     mutationGuard(request)
-    if(Number(request.headers.get('content-length'))>52*1024*1024) throw new Error('Upload exceeds 50 MB')
-    const file=(await request.formData()).get('file')
-    if(!file || typeof file.arrayBuffer!=='function') throw new Error('Missing media file')
-    if(file.size<12 || file.size>50*1024*1024) throw new Error('Media size must be between 12 bytes and 50 MB')
-    const bytes=Buffer.from(await file.arrayBuffer())
-    const [ext,type,mimeType]=sniff(bytes)
+    const multipart=(request.headers.get('content-type') || '').toLowerCase().startsWith('multipart/form-data;')
+    const limit=multipart ? MAX_MULTIPART_BYTES : MAX_MEDIA_BYTES
+    if(Number(request.headers.get('content-length'))>limit) throw new Error(`Upload exceeds ${limit} bytes`)
+    if(!request.body) throw new Error('Missing media file')
+    let source=Readable.fromWeb(request.body),name
+    if(multipart) {
+      // Bound the entire legacy envelope before the platform's buffering formData parser.
+      const chunks=[]
+      await pipeline(source,uploadCounter(limit),new Writable({write(chunk,_encoding,done) { chunks.push(chunk); done() }}),{signal:request.signal})
+      const form=await new Response(Buffer.concat(chunks),{headers:{'Content-Type':request.headers.get('content-type')}}).formData()
+      const file=form.get('file')
+      if(!file || typeof file.stream!=='function') throw new Error('Missing media file')
+      if(file.size<12 || file.size>MAX_LEGACY_BYTES) throw new Error('Media size must be between 12 bytes and 50 MiB for multipart uploads')
+      name=file.name
+      source=Readable.fromWeb(file.stream())
+    } else {
+      name=decodeURIComponent(request.headers.get('x-file-name') || '')
+    }
     const id=randomUUID()
-    const fileName=`${id}.${ext}`
     const mediaDir=path.join(dataRoot,'media')
-    const fullPath=path.join(mediaDir,fileName)
     await mkdir(mediaDir,{recursive:true})
-    await writeFile(fullPath,bytes)
-    const name=(file.name || fileName).replace(/[\0\r\n]/g,'').trim().slice(0,200) || fileName
-    const item={id,name,type,mimeType,size:bytes.length,fileName,url:`/api/media/${fileName}`}
-    let state
-    try { state=await transact(current=>({...current,media:[...current.media,item]})) }
-    catch(error) { await unlink(fullPath).catch(()=>{}); throw error }
+    tempPath=path.join(mediaDir,`${id}.tmp`)
+    const counter=uploadCounter(multipart ? MAX_LEGACY_BYTES : MAX_MEDIA_BYTES,{validate:true})
+    await pipeline(source,counter,createWriteStream(tempPath,{flags:'wx'}),{signal:request.signal})
+    const [ext,type,mimeType]=counter.mediaType
+    const fileName=`${id}.${ext}`
+    fullPath=path.join(mediaDir,fileName)
+    await rename(tempPath,fullPath)
+    name=(name || fileName).replace(/[\0\r\n]/g,'').trim().slice(0,200) || fileName
+    const item={id,name,type,mimeType,size:counter.bytes,fileName,url:`/api/media/${fileName}`}
+    const state=await transact(current=>({...current,media:[...current.media,item]}))
+    fullPath=undefined
     return Response.json({media:item,revision:state.revision})
   } catch(error) { return errorResponse(error) }
+  finally {
+    if(tempPath) await unlink(tempPath).catch(()=>{})
+    if(fullPath) await unlink(fullPath).catch(()=>{})
+  }
 }
