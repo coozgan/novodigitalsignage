@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {mkdtemp,rm} from 'node:fs/promises'
+import {mkdtemp,rm,readFile} from 'node:fs/promises'
 import {spawn} from 'node:child_process'
 import os from 'node:os'
 import path from 'node:path'
@@ -102,6 +102,14 @@ test('serves rendered Studio UI and live API over Next.js production server', as
     assert.equal(devRes.devices.length,2)
     assert.equal(devRes.devices.some(d=>d.ip==='192.168.80.128' && d.reachable),true)
     assert.equal(devRes.devices.some(d=>d.ip==='192.168.80.100' && d.reachable),true)
+    const addedResponse=await fetch(`${base}/api/devices`,{method:'POST',headers,body:JSON.stringify({action:'add',name:'Acceptance player',ip:'192.168.254.254'})})
+    assert.equal(addedResponse.status,201)
+    const registry=JSON.parse(await readFile(path.join(dir,'devices.json'),'utf8'))
+    assert.equal(registry.length,3)
+    assert.equal(registry.find(d=>d.ip==='192.168.254.254').name,'Acceptance player')
+    const duplicate=await fetch(`${base}/api/devices`,{method:'POST',headers,body:JSON.stringify({action:'add',name:'Duplicate',ip:'192.168.254.254'})})
+    assert.equal(duplicate.status,400)
+    assert.deepEqual(JSON.parse(await readFile(path.join(dir,'devices.json'),'utf8')),registry)
   } finally {
     server.kill('SIGTERM')
   }
