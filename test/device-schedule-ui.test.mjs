@@ -2,6 +2,13 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {readFile} from 'node:fs/promises'
 // Source-level wiring checks supplement the production build, not browser interaction coverage.
+test('device selection is only offered inside the publish dialog',async()=> {
+  const page=await readFile(new URL('../app/page.js',import.meta.url),'utf8')
+  assert.doesNotMatch(page,/Select all|Clear selection|className="select-device"/)
+  assert.match(page,/<legend>Target devices<\/legend>/)
+  assert.match(page,/deviceIds: selected/)
+  assert.match(page,/!selected.length/)
+})
 test('dashboard screenshot link is developer-only while schedule viewer is available normally',async()=> {
   const page=await readFile(new URL('../app/page.js',import.meta.url),'utf8')
   assert.match(page,/\{developerMode && <a[^>]*href=\{`\/api\/devices\/screenshot/)

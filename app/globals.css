@@ -85,8 +85,6 @@ main > .heading-actions .muted { margin: 0 auto 0 4px; font-size: 12px; }
 .collection-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,300px),1fr)); gap: 20px; }
 .device-card, .collection-card, .schedule-card, .media-card, .empty-state { min-width: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); padding: 20px; }
 .device-card { display: grid; gap: 14px; }
-.device-card.selected { border-color: var(--accent); }
-.select-device { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: 12px; cursor: pointer; }
 .device-visual { padding: 16px 16px 8px; border-radius: 8px; background: #edf1f7; display: grid; place-items: center; }
 .display-frame { width: min(320px,100%); aspect-ratio: 16/9; border-radius: 6px; padding: 5px; background: #303a4c; position: relative; }
 .display-screen { height: 100%; border-radius: 3px; background: #172132; color: #fff; display: grid; place-content: center; text-align: center; position: relative; overflow: hidden; }
