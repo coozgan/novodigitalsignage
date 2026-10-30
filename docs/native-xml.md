@@ -27,6 +27,14 @@ Implemented in `nativeScheduleXml`, `nativeSchedulePayload`, and `nativeSchedule
   sent **after** `deployPlaylistSession` for each referenced playlist. Native Studio mode activates through `Device::slot_finishThread` calling `DeviceTCP::tcp_Upload_Schedule` (`0x10009c460`). The legacy `SCHEDULE;` command does not activate schedules on the tested firmware. No activation ACK is returned.
 - Verification reads back both `GET_PLAYLISTS;NULL` and `DOWNLOAD_SCHEDULE;NULL`, comparing parsed XML tags and attributes (`nativeScheduleMatches`).
 
+## Device-side schedule access and removal
+
+The Devices dashboard has an on-demand device schedule viewer, distinct from local Schedules. `GET /api/devices/schedule?deviceId=...` reads `DOWNLOAD_SCHEDULE;NULL`, returns parsed rules and a SHA-256 revision, and never publishes content. Add `&format=xml` to download the original device XML. Dates are shown in browser local time, not an inferred device timezone or active-rule state.
+
+`DELETE /api/devices/schedule` requires `{deviceId, confirmed:true, revision}` and the same-origin guard. It rereads the schedule and rejects a changed revision before sending anything destructive. Native `ScheduleMenuButton` labels `_Delete_Schedule_` as “Remove (Device Side)” (0x1001c0db6/0x1001c0e6c). `ScheduleUI::openFile` branches on this sentinel at 0x1001740ca to `genarateXML` at 0x1001744a0, generating an empty `AlarmManager`/`Alarms` document. Clearing uses this document via `TCP_SCHEDULE`, the existing Studio-mode schedule upload command. It removes schedule rules/default assignment, not playlist files or local studio content. A subsequent download must contain zero alarms and no default playlist before the API reports verified. Missing/malformed readback or retained rules remain unverified (HTTP 207), never success from an ACK alone.
+
+Read-only API and XML download were checked against FRONTOFFICE's `TESTNOW` schedule. Native clear mapping and successful/failed verification paths are covered offline. The existing hardware schedule was not deleted as a test.
+
 ## Publish and play
 
 After playlist upload and listing verification, send `TCP_PLAY;<bareName>` without the listing's storage prefix, then verify with `REMOTE_CONTROL;[Current_Playing_Playlist_Name]`. `GET_All` does not include playback status. Playback-name readback proves the selection only, not visible rendering. Live screenshots are required to verify the rendered content.

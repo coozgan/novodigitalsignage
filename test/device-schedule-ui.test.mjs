@@ -1,0 +1,21 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import {readFile} from 'node:fs/promises'
+// Source-level wiring checks supplement the production build, not browser interaction coverage.
+test('dashboard screenshot link is developer-only while schedule viewer is available normally',async()=> {
+  const page=await readFile(new URL('../app/page.js',import.meta.url),'utf8')
+  assert.match(page,/\{developerMode && <a[^>]*href=\{`\/api\/devices\/screenshot/)
+  assert.match(page,/<DeviceSchedule device=\{device\}/)
+  assert.match(page,/<DeviceSnapshot device=\{device\}/)
+})
+test('schedule UI requires confirmation, revision and explicit read; handles unverified readback',async()=> {
+  const ui=await readFile(new URL('../app/DeviceSchedule.js',import.meta.url),'utf8')
+  assert.match(ui,/window\.confirm/)
+  assert.match(ui,/confirmed: true, revision: data\.revision/)
+  assert.match(ui,/result\.verified === true/)
+  assert.match(ui,/View device schedule/)
+  assert.match(ui,/Download schedule XML/)
+  assert.match(ui,/Delete device schedule/)
+  assert.match(ui,/pending\.current\?\.abort/)
+  assert.match(ui,/key=\{`\$\{device\.id\}:\$\{device\.ip\}`\}/)
+})
