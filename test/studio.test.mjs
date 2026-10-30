@@ -41,7 +41,7 @@ test('round-trips DeviceTCP frames and rejects malformed frames', () => {
   assert.throws(()=>decodeFrame('YWJ'))
 })
 
-test('uploads media, persists playlists and schedules, and blocks unverified deploy', async () => {
+test('uploads media, persists playlists and schedules, and rejects unknown deploy targets', async () => {
   const png = Buffer.from('89504e470d0a1a0a0000000d49484452','hex')
   const form = new FormData()
   form.set('file',new File([png],'poster.png',{type:'image/png'}))
@@ -63,9 +63,10 @@ test('uploads media, persists playlists and schedules, and blocks unverified dep
   assert.equal(loaded.playlists[0].name,'Lobby Loop')
   assert.equal(loaded.schedules[0].playlistId,'pl-1')
 
-  const dep = await deploy.POST(new Request('http://127.0.0.1:3000/api/deploy',{method:'POST',headers:{origin:'http://127.0.0.1:3000','content-type':'application/json'},body:JSON.stringify({deviceIds:['device-1'],kind:'schedule',id:'sc-1'})}))
+  const dep = await deploy.POST(new Request('http://127.0.0.1:3000/api/deploy',{method:'POST',headers:{origin:'http://127.0.0.1:3000','content-type':'application/json'},body:JSON.stringify({deviceIds:['unknown-device'],kind:'schedule',id:'sc-1'})}))
   assert.equal(dep.status,400)
-  assert.match((await dep.json()).error,/not available yet.*Nothing was sent/)
+  assert.match((await dep.json()).error,/no longer available/)
+  assert.deepEqual(await (await studio.GET()).json(),loaded)
   const devices = await inspectDevices()
   assert.equal(devices.length,2)
   assert.equal(devices.every(d=>typeof d.protocolVerified==='boolean'),true)
@@ -93,9 +94,9 @@ test('serves rendered Studio UI and live API over Next.js production server', as
     const reloaded=await (await fetch(`${base}/api/studio`)).json()
     assert.deepEqual(reloaded.playlists,state.playlists)
     assert.deepEqual(reloaded.schedules,state.schedules)
-    const blocked=await fetch(`${base}/api/deploy`,{method:'POST',headers,body:JSON.stringify({deviceIds:['device-1'],kind:'schedule',id:'sc-1'})})
+    const blocked=await fetch(`${base}/api/deploy`,{method:'POST',headers,body:JSON.stringify({deviceIds:['unknown-device'],kind:'schedule',id:'sc-1'})})
     assert.equal(blocked.status,400)
-    assert.match(JSON.stringify(await blocked.json()),/Nothing was sent/)
+    assert.match(JSON.stringify(await blocked.json()),/no longer available/)
     const crossOrigin=await fetch(`${base}/api/studio`,{method:'PUT',headers:{...headers,origin:'https://untrusted.example'},body:JSON.stringify(reloaded)})
     assert.equal(crossOrigin.status,400)
     assert.match(JSON.stringify(await crossOrigin.json()),/Cross-origin changes are not allowed/)

@@ -66,7 +66,7 @@ export default function DeviceControls({device,onChanged,developerMode=false}) {
       <button type="button" onClick={()=>send('reboot',true)}>Reboot device…</button>
     </fieldset>
     <p><small>Settings are checked against device readback. Check the screen after changing playback or rebooting.</small></p>
-    <p><small>Replacing playlist content is not available yet. Deleting a playlist does not upload a replacement.</small></p>
-    {developerMode && <details><summary>Developer details</summary><p>Deletion uses the native DELETE command with a freshly read playlist allowlist. Verification means only that a valid subsequent GET_PLAYLISTS list omits the selected name. No delete-specific acknowledgement is known. Content upload is blocked on native XML/package and ciphertext validation, not firmware update.</p></details>}
+    <p><small>Use Publish content to upload a playlist, or Publish & play to upload and start it. Upload may interrupt playback. Deleting a playlist does not upload a replacement.</small></p>
+    {developerMode && <details><summary>Developer details</summary><p>Deletion uses the native DELETE command with a freshly read playlist allowlist. Verification means only that a valid subsequent GET_PLAYLISTS list omits the selected name. No delete-specific acknowledgement is known. Check per-device publishing results in the publish dialog.</p></details>}
   </section>
 }

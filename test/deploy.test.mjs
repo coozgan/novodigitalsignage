@@ -124,9 +124,9 @@ try {
       host:'127.0.0.1',port:data.address().port,deriveKey:async()=>Buffer.alloc(32,7),deriveIV:async()=>Buffer.alloc(16,3),
       now:new Date(2026,9,29,1,0,0),timeout:500,
     })
-    assert.equal(controlCommands[3],'SCHEDULE;<AlarmManager/>[.PLS_FILES.]<Playlists/>')
     // Control must reject unexpected ack commands.
     await assert.rejects(session.request('TCP_UPLOAD;My List',f=>f.startsWith('[NOPE]'),50),/Timed out/)
+    assert.deepEqual(controlCommands.slice(3,7),['TCP_UPLOAD;My List','TCP_UPLOAD_FILE_COUNT;1','TCP_UPLOAD_DONE;My List','TCP_SCHEDULE;<AlarmManager/>[.PLS_FILES.]<Playlists/>'])
   } finally {session.close()}
 } finally {controlServer.close();data.close();await Promise.all([once(controlServer,'close'),once(data,'close')])}
 console.log('Deployment framing, encryption, fragmented acknowledgement and timeout checks passed')

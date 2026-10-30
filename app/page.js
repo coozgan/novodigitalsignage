@@ -57,6 +57,7 @@ export default function Studio() {
   const [devices, setDevices] = useState([]);
   const [deviceLoaded, setDeviceLoaded] = useState(false);
   const [snapshotRefresh, setSnapshotRefresh] = useState(0);
+  const [controlsRefresh, setControlsRefresh] = useState(0);
   const [addingDevice, setAddingDevice] = useState(false);
   const [newDevice, setNewDevice] = useState({name:'',ip:''});
   const [editingDevice, setEditingDevice] = useState(null);
@@ -99,6 +100,16 @@ export default function Studio() {
     if (!loaded) throw new Error('Load studio data successfully before saving changes.');
     const saved = await request('/api/studio', json({ ...next, revision: studio.revision }, 'PUT'));
     setStudio(saved);
+  }
+  function publish(play = false) {
+    if (busy || !deploy?.item?.id || !selected.length) return;
+    run(play ? 'Publishing & playing' : 'Publishing', async () => {
+      const result = await request('/api/deploy', json({ deviceIds: selected, kind: deploy.kind, id: deploy.item.id, ...(deploy.kind === 'playlist' ? { play } : {}) }));
+      if (!Array.isArray(result.results)) throw new Error('Publish response is missing device results. Check the devices before retrying.');
+      setDeploy(current => ({ ...current, result, publishedName: deploy.item.name }));
+      setControlsRefresh(value => value + 1);
+      setSnapshotRefresh(value => value + 1);
+    });
   }
   function newEditor(kind, value) {
     setError('');
@@ -162,7 +173,6 @@ export default function Studio() {
         {!loaded && <div className="load-notice">Studio data is not loaded. Editing is unavailable until the API responds. <button disabled={!!busy} onClick={() => run('Loading', loadStudio)}>Retry studio</button></div>}
         {tab === 'Devices' && <>
           <div className="heading-actions"><button className="primary" disabled={!!busy} onClick={() => {setNewDevice({name:'',ip:''});setAddingDevice(true);}}>+ Add device</button><button disabled={!!busy || !devices.length} onClick={() => setSelected(devices.map(device => device.id))}>Select all</button><button disabled={!!busy || !selected.length} onClick={() => setSelected([])}>Clear selection</button><span className="muted">{selected.length} selected</span><button disabled={!!busy || !loaded} onClick={() => { setError(''); setDeploy({ kind: 'playlist', item: studio.playlists[0] || null }); }}>Publish content</button><button disabled={!!busy || !loaded} onClick={() => { setError(''); setDeploy({ kind: 'schedule', item: studio.schedules[0] || null }); }}>Publish schedule</button></div>
-          <p className="load-notice">Publishing is currently unavailable while support for the player’s content format is completed. You can prepare playlists, schedules, and targets, but nothing will be sent.</p>
           <section className="fleet-summary" aria-label="Fleet summary"><div><span className="summary-icon"><Icon name="Devices" size={23}/></span><div><span>Display players</span><strong>{deviceLoaded ? devices.length : '…'} <small>configured</small></strong></div></div><div><span className="status-dot green-dot"/><div><span>Reachable</span><strong>{deviceLoaded ? devices.filter(device => device.reachable).length : '…'} <small>on the network</small></strong></div></div>{developerMode && <div><span className="status-dot amber-dot"/><div><span>Protocol verified</span><strong>{deviceLoaded ? devices.filter(device => device.protocolVerified).length : '…'} <small>responding to status queries</small></strong></div></div>}</section>
           <div className="section-heading"><h2>Connected devices <span>{devices.length}</span></h2><span className="muted">Live device discovery</span></div>
           <div className="device-grid">{devices.map((device, index) => <article className={`device-card ${selected.includes(device.id) ? 'selected' : ''}`} key={device.id}>
@@ -170,7 +180,7 @@ export default function Studio() {
             <DeviceSnapshot device={device} refresh={snapshotRefresh}/>
             <div className="device-info"><h3>{device.name}</h3><span className="device-model">{device.model || 'DS200'}</span></div><div className="device-address"><span>IP address</span><code>{device.ip || 'Not provided'}</code></div>{developerMode && <><div className="device-address"><span>Native protocol</span><span className={device.protocolVerified ? 'green-text' : 'amber-text'}>{device.protocolVerified ? 'Verified' : 'Unverified'}</span></div><p className="device-detail">{typeof device.detail === 'string' ? device.detail : device.detail ? JSON.stringify(device.detail) : 'Read-only queries are available. Deployment requires protocol verification.'}</p></>}
             <div className="device-actions"><a className="button" href={`/api/devices/screenshot?deviceId=${encodeURIComponent(device.id)}`} target="_blank" rel="noreferrer">Screenshot</a>{developerMode && ['status', 'playlists'].map(action => <button key={action} disabled={!!busy} onClick={() => run('Reading device', async () => { const data = await request('/api/devices', json({ deviceId: device.id, action })); setReading({ title: `${device.name}: ${action}`, data }); })}>{action === 'status' ? 'Read status' : 'Read playlists'}<Icon name="arrow" size={15}/></button>)}<button disabled={!!busy} onClick={() => { setError(''); setDeviceEdit({name:device.name,ip:device.ip}); setEditingDevice(device); }}>Edit device</button><button disabled={!!busy} onClick={() => { setError(''); setRemovingDevice(device); }}>Remove device</button></div>
-            <DeviceControls device={device} developerMode={developerMode} onChanged={loadDevices}/>
+            <DeviceControls key={`${device.id}:${controlsRefresh}`} device={device} developerMode={developerMode} onChanged={loadDevices}/>
           </article>)}</div>
           {!devices.length && <div className="empty-state"><Icon name="Devices" size={36}/><h3>{deviceLoaded ? 'No players added' : 'Loading your players'}</h3><p>Add a device by its LAN IP address, or refresh to query your saved players. No device status is simulated.</p></div>}
           {developerMode && <div className="protocol-note"><span className="note-icon"><Icon name="shield" size={22}/></span><div><h3>Connected does not mean deployment-ready.</h3><p>Device controls communicate directly over the local network. Close native NovoDS Studio before taking screenshots. Status connectivity does not verify content deployment.</p></div><span className="badge amber">Local network</span></div>}
@@ -246,9 +256,13 @@ export default function Studio() {
         ? <label>Playlist<select required value={deploy.item?.id || ''} onChange={event => setDeploy(current => ({ ...current, item: studio.playlists.find(list => list.id === event.target.value) }))}><option value="">{studio.playlists.length ? 'Choose a playlist…' : 'No saved playlists yet'}</option>{studio.playlists.map(list => <option key={list.id} value={list.id}>{list.name}</option>)}</select></label>
         : <label>Schedule<select required value={deploy.item?.id || ''} onChange={event => setDeploy(current => ({ ...current, item: studio.schedules.find(schedule => schedule.id === event.target.value) }))}><option value="">{studio.schedules.length ? 'Choose a schedule…' : 'No saved schedules yet'}</option>{studio.schedules.map(schedule => <option key={schedule.id} value={schedule.id}>{schedule.name}</option>)}</select></label>}</fieldset>
       <fieldset disabled={!!busy} className="deploy-targets"><legend>Target devices</legend>{devices.map(device => <label key={device.id}><input type="checkbox" checked={selected.includes(device.id)} onChange={event => setSelected(current => event.target.checked ? [...current, device.id] : current.filter(id => id !== device.id))}/><span>{device.name}<small>{device.ip}</small></span></label>)}{!devices.length && <p>No devices loaded. Refresh the Devices tab first.</p>}</fieldset>
-      <div className="deploy-warning"><Icon name="shield"/><span>Publishing is unavailable right now: support for the player’s content format is still being completed. You can review your choices here, but nothing is sent and players are not changed.</span></div>
+      <div className="deploy-warning"><Icon name="shield"/><span>{deploy.kind === 'schedule' ? 'Publishing replaces the current schedule on each target device and includes its referenced playlist. ' : 'Publishing uploads the playlist to each target device. Publish & play also starts it immediately. '}Upload may interrupt current playback.</span></div>
+      <div role="status" aria-live="polite" aria-atomic="true">
+        {busy.startsWith('Publishing') && <p>Publishing to selected devices… Please keep this dialog open.</p>}
+        {deploy.result && <><h3>Results: {deploy.publishedName}</h3><p>{deploy.result.summary}</p><ul>{deploy.result.results.map(result => <li key={result.deviceId}><strong>{devices.find(device => device.id === result.deviceId)?.name || result.deviceId}</strong>: {result.status === 'published' ? 'Published' : 'Failed'}{result.error && `: ${result.error}`}{result.playStatus && ` · Playback: ${result.playStatus}`}{result.playError && `: ${result.playError}`}</li>)}</ul></>}
+      </div>
       {error && <p className="form-error" role="alert">{error}</p>}
-      <div className="modal-actions"><button disabled={!!busy} onClick={() => setDeploy(null)}>Close</button></div>
+      <div className="modal-actions"><button disabled={!!busy} onClick={() => setDeploy(null)}>Close</button><button className="primary" disabled={!!busy || !deploy.item?.id || !selected.length} onClick={() => publish()}>{busy === 'Publishing' ? 'Publishing…' : 'Publish'}</button>{deploy.kind === 'playlist' && <button className="primary" disabled={!!busy || !deploy.item?.id || !selected.length} onClick={() => publish(true)}>{busy === 'Publishing & playing' ? 'Publishing & playing…' : 'Publish & play'}</button>}</div>
     </Modal>}
   </div>;
 }
