@@ -155,6 +155,34 @@ test('persistent registry and public device endpoints without hardware traffic',
     assert.deepEqual(duplicate.map(r=>r.status).sort(),[200,400])
     assert.deepEqual(await readdir(dir),['devices.json'])
   })
+  await t.test('updates device name and IP while preserving ID, model, and metadata',async()=> {
+    const list=await stored()
+    const target=list[0]
+    const response=await api.POST(request({action:'update',deviceId:target.id,name:' Renamed Player ',ip:'192.168.80.200'}))
+    assert.equal(response.status,200)
+    const {device}=await response.json()
+    assert.equal(device.id,target.id)
+    assert.equal(device.name,'Renamed Player')
+    assert.equal(device.ip,'192.168.80.200')
+    assert.equal(device.model,target.model)
+    assert.deepEqual((await stored()).find(d=>d.id===target.id),device)
+    const sameIp=await api.POST(request({action:'update',deviceId:target.id,name:'Renamed Again',ip:'192.168.80.200'}))
+    assert.equal(sameIp.status,200)
+    if(list.length>1) {
+      const other=list.find(d=>d.id!==target.id)
+      const dup=await api.POST(request({action:'update',deviceId:target.id,name:'Renamed',ip:other.ip}))
+      assert.equal(dup.status,400)
+    }
+    for(const ip of ['8.8.8.8','127.0.0.1','localhost','http://10.0.0.1','invalid',null,123]) {
+      assert.equal((await api.POST(request({action:'update',deviceId:target.id,name:'Valid',ip}))).status,400)
+    }
+    for(const name of ['','   ',null,123,'x'.repeat(201),'bad\nname']) {
+      assert.equal((await api.POST(request({action:'update',deviceId:target.id,name,ip:'192.168.80.201'}))).status,400)
+    }
+    assert.equal((await api.POST(request({action:'update',deviceId:'unknown-id',name:'Valid',ip:'192.168.80.201'}))).status,400)
+    assert.equal((await api.POST(request({action:'update',deviceId:target.id,name:'Valid',ip:'192.168.80.201',extra:'bad'}))).status,400)
+    assert.equal((await api.POST(request({action:'update',deviceId:target.id,name:'Valid',ip:'192.168.80.201'},'https://evil.example'))).status,400)
+  })
   await t.test('removing every entry leaves the registry empty across restart',async()=> {
     for(const device of await stored()) assert.deepEqual(await registry.removeDevice(device.id),device)
     assert.deepEqual(await stored(),[])

@@ -1,5 +1,5 @@
 import {inspectDevices,queryDevice} from '../../../lib/protocol.mjs'
-import {addDevice,findDevice,removeDevice} from '../../../lib/devices.mjs'
+import {addDevice,findDevice,removeDevice,updateDevice} from '../../../lib/devices.mjs'
 import {mutationGuard,errorResponse} from '../../../lib/http.mjs'
 export const runtime='nodejs'
 export const dynamic='force-dynamic'
@@ -16,6 +16,11 @@ export async function POST(request) {
     if(action==='add') {
       if(Object.keys(body).some(k=>!['action','name','ip'].includes(k))) throw new Error('Invalid add-device request')
       return Response.json({device:await addDevice({name,ip})},{status:201})
+    }
+    if(action==='update') {
+      const targetId=deviceId || body.id
+      if(!targetId || Object.keys(body).some(k=>!['action','deviceId','id','name','ip'].includes(k))) throw new Error('Invalid update-device request')
+      return Response.json({device:await updateDevice(targetId,{name,ip})})
     }
     if(action==='remove') {
       if(Object.keys(body).some(k=>!['action','deviceId','confirmed'].includes(k))) throw new Error('Invalid remove-device request')
