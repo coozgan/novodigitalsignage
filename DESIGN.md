@@ -19,3 +19,11 @@ Device schedule remains an explicit read-only fetch until a confirmed deletion. 
 
 ## Validation
 Check desktop and narrow browser layouts, keyboard dialog opening/closing and focus return, entry selection and cancellation without mutations, live schedule reads, all workspace tabs, existing automated tests, and production build. Never operate playback or delete real content during UI validation.
+
+### Observed acceptance results (2026-10-30)
+- Baseline `92818a2` exposed nine schedule columns. The redesigned live schedule exposes four grouped columns, reducing top-level columns by 56%, while retaining all four real device entries and raw diagnostics in four expandable details sections.
+- Keyboard acceptance: focused View device schedule, pressed Enter, and observed an open native dialog with focus inside and four loaded entries. Delete selected was disabled before selection. Escape closed the dialog and returned focus to the launcher button.
+- Desktop at 1512px: dialog content width 1120px, table client/scroll widths both 1064px. No table clipping or horizontal scrolling was required.
+- Narrow-window acceptance: requested 390px, but this Chrome window enforces a 500px minimum. At the actual 500px viewport, page scroll width was 500px, dialog width 476px, and table client/scroll widths both 440px. All four entries remained available as stacked rows, with all four diagnostic disclosures initially closed. This run does not establish a real 390px viewport result.
+- Device timezone uncertainty remained visible. Checks only opened/read the schedule and exercised selection/dismissal, without playback, reboot, upload, or deletion operations.
+- Automated regression suite: 82 passed, zero failed. Production build passed. These measurements establish reduced information density and successful keyboard/responsive inspection, not a measured human usability preference.
