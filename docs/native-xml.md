@@ -96,6 +96,16 @@ This is an overlay settings document, not evidence for playlist page/media conve
 5. Recover the complete `Play` children and the separate `Playlists` reference document before constructing a schedule upload payload.
 6. Only then add `lib/native-xml.mjs` and `test/native-xml.test.mjs`. Require a golden native fixture, XML escaping/invalid-character tests and rejection of unsupported layouts. An XML parser accepting output proves syntax only, not device compatibility.
 
+## Deployment API follow-up (2026-10-30)
+
+The publish gate remains closed. `/api/deploy` now reads the persistent registry on every request, strictly validates request and ID types, deduplicates targets in selection order, and rejects the entire batch if any target is unknown. A valid saved playlist or schedule returns HTTP 501 with `code: PROTOCOL_UNVERIFIED`, a nontechnical `error`, separate technical `details`, and one `results` entry per unique device (`deviceId`, `status: blocked`, `code`). These are blocked attempts, not transfer or installation success. The route does not import or invoke the upload transport.
+
+A fresh read-only inventory still found only the two overlay settings XML files, not playable fixtures. REA `binary_session` confirmed the existing Hopper session matched the documented executable and reported an active `list_procedures` request. A focused `procedure_pseudo_code` request for `Global::getPlayListXmlFilePath` at `0x100183ce0` failed with `provider_unavailable`, stage `decompilation`, request 37, provider state `unreachable`. The suggested recovery requires closing and reopening the provider. This shared session was not restarted. Neither the native app nor any device was changed. This failure is an investigation blocker, not a filename or packaging result.
+
+Follow-up still requires known-good native playlist/schedule fixtures, complete page/media serialization and file-reference mapping, schedule weekday/time semantics, and independent native ciphertext vectors. No serializer or live publishing is justified by the available evidence.
+
+Regression checks: `node --test test/deploy-api.test.mjs test/deploy.test.mjs` covers both saved item kinds, stale/replaced registry entries, deduplication, malformed inputs, cross-origin requests, unchanged saved state and registry, and fail-fast guards against TCP/UDP connection creation in the blocked API. Transport checks use loopback mocks only, not live devices.
+
 ## Validation
 
 No serialization implementation was justified, so no placeholder module, always-throw API or tautological serializer tests were added. Documentation was checked with `git diff --check`. Native import/playback and device acceptance remain **unverified**. Existing tests, if run by the coordinator, do not close the native XML compatibility gap.
