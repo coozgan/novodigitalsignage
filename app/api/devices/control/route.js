@@ -1,7 +1,7 @@
 import {queryDevice,exchangeDevice} from '../../../../lib/protocol.mjs'
 import {findDevice} from '../../../../lib/devices.mjs'
 import {mutationGuard,errorResponse} from '../../../../lib/http.mjs'
-import {parseStatus,parsePlaylists,controlCommand,controlOutcome,volumeQuery} from '../../../../lib/control.mjs'
+import {parseStatus,parsePlaylists,controlCommand,controlOutcome,volumeQuery,deletePlaylist} from '../../../../lib/control.mjs'
 export const runtime='nodejs'
 export const dynamic='force-dynamic'
 async function readStatus(device) {
@@ -21,8 +21,9 @@ export async function POST(request) {
   try {
     mutationGuard(request)
     const body=await request.json()
-    if(!body || Array.isArray(body) || Object.keys(body).some(k=>!['deviceId','action','value'].includes(k))) throw new Error('Invalid control request')
+    if(!body || Array.isArray(body) || Object.keys(body).some(k=>!['deviceId','action','value','confirmed'].includes(k))) throw new Error('Invalid control request')
     const {deviceId,action,value}=body, device=await findDevice(deviceId)
+    if(action==='delete') return Response.json({action,...await deletePlaylist(device,value,body.confirmed,{queryDevice,exchangeDevice})})
     const context={}
     if(action==='play') context.playlists=parsePlaylists((await queryDevice(device,'playlists')).frames)
     if(action==='volume') context.volume=parseStatus((await exchangeDevice(device,volumeQuery)).frames).volume

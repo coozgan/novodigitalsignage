@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {controlCommand,controlOutcome,parseStatus,parsePlaylists,volumeQuery} from '../lib/control.mjs'
+import {controlCommand,controlOutcome,parseStatus,parsePlaylists,volumeQuery,playlistReadback,deletePlaylist} from '../lib/control.mjs'
 import {POST} from '../app/api/devices/control/route.js'
 
 test('native control mappings use exact wire commands',()=> {
@@ -36,5 +36,58 @@ test('API rejects cross origin, unknown device and raw command without device mu
   for(const [body,origin] of [[{deviceId:'device-1',action:'stop'},'https://evil.example'],[{deviceId:'unknown',action:'stop'},undefined],[{deviceId:'device-1',command:'STOP;NULL'},undefined],[{deviceId:'device-1',action:'reboot',value:false},undefined]]) {
     const response=await POST(new Request('http://localhost:3000/api/devices/control',{method:'POST',headers:{'Content-Type':'application/json',...(origin?{origin}:{})},body:JSON.stringify(body)}))
     assert.equal(response.status,400)
+  }
+})
+test('delete uses exact native command, explicit confirmation and device allowlist',()=> {
+  const name='[Internal] Demo', context={confirmed:true,playlists:[{name}]}
+  assert.equal(controlCommand('delete',name,context),'DELETE;[Internal] Demo')
+  for(const confirmed of [undefined,false,'true',1]) assert.throws(()=>controlCommand('delete',name,{...context,confirmed}))
+  assert.throws(()=>controlCommand('delete','missing',context))
+  assert.throws(()=>controlCommand('delete',name,{confirmed:true}))
+  for(const value of ['',null,1,'x;STOP','x\n','x\0','x\x7f','../x','a/b','a\\b','x:y','x,y',' x','x|y','@_overlaymessage','a'.repeat(256)]) {
+    assert.throws(()=>controlCommand('delete',value,{confirmed:true,playlists:[{name:value}]}))
+  }
+  assert.throws(()=>controlCommand('update',name,context))
+  assert.throws(()=>controlCommand('firmware',true,context))
+})
+test('delete readback fails closed on missing, error, partial, duplicate or ambiguous listings',()=> {
+  assert.deepEqual(playlistReadback(['[GET_PLAYLISTS]']),[])
+  assert.deepEqual(playlistReadback(['[GET_PLAYLISTS][Internal] Demo:29.5 MB,Other:100 BYTES']),[{name:'[Internal] Demo',size:'29.5 MB'},{name:'Other',size:'100 BYTES'}])
+  for(const frames of [[],['OK'],['[GET_PLAYLISTS][ERROR]playing'],['[GET_PLAYLISTS]Demo:1 MB,broken'],['[GET_PLAYLISTS]Demo:1 MB,Demo:2 MB'],['[GET_PLAYLISTS]','[GET_PLAYLISTS]Demo:1 MB'],['[GET_PLAYLISTS]Demo:.. MB']]) assert.equal(playlistReadback(frames),null)
+})
+test('delete orchestration reads fresh allowlist and verifies only valid absence, never an ACK',async()=> {
+  const name='[Internal] Demo', calls=[]
+  for(const [after,state] of [
+    [{reachable:true,frames:['[GET_PLAYLISTS]Other:2 MB']},'verified'],
+    [{reachable:true,frames:['[GET_PLAYLISTS]']},'verified'],
+    [{reachable:true,frames:[`[GET_PLAYLISTS]${name}:1 MB`]},'unverified'],
+    [{reachable:true,frames:['OK']},'unverified'],
+    [{reachable:true,frames:['[GET_PLAYLISTS]broken']},'unverified'],
+    [{reachable:false,frames:[]},'unverified'],
+  ]) {
+    calls.length=0
+    const result=await deletePlaylist({id:'offline-fixture'},name,true,{
+      queryDevice:async(device,action)=>{calls.push(action); return calls.length===1?{reachable:true,frames:[`[GET_PLAYLISTS]${name}:1 MB`]}:after},
+      exchangeDevice:async(device,command)=>{calls.push(command); return {reachable:true,frames:['OK']}},
+    })
+    assert.deepEqual(calls,['playlists',`DELETE;${name}`,'playlists'])
+    assert.equal(result.state,state)
+  }
+})
+test('delete never sends a mutation when confirmation or fresh allowlist fails',async()=> {
+  for(const [confirmed,before] of [[false,null],['true',null],[true,{reachable:false,frames:[]}],[true,{reachable:true,frames:['[GET_PLAYLISTS]']}],[true,{reachable:true,frames:['[GET_PLAYLISTS]Demo:1 MB,broken']}]]) {
+    let sent=false
+    await assert.rejects(deletePlaylist({},'Demo',confirmed,{
+      queryDevice:async()=>{assert.equal(confirmed,true);return before},
+      exchangeDevice:async()=>{sent=true;throw new Error('Must not send')},
+    }))
+    assert.equal(sent,false)
+  }
+})
+test('API rejects unconfirmed delete without querying hardware',async()=> {
+  for(const confirmed of [undefined,false,'true']) {
+    const response=await POST(new Request('http://localhost:3000/api/devices/control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({deviceId:'device-1',action:'delete',value:'Demo',confirmed})}))
+    assert.equal(response.status,400)
+    assert.match((await response.json()).error,/Confirm playlist deletion/)
   }
 })
