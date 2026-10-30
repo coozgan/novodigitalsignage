@@ -6,7 +6,7 @@ import {mutationGuard,errorResponse} from '../../../lib/http.mjs'
 import {openUploadControl,deployPlaylistSession,deployScheduleSession,uploadKey,uploadIV} from '../../../lib/deploy.mjs'
 import {nativePlaylistFiles,nativeScheduleXml,nativeSchedulePayload,nativeScheduleMatches} from '../../../lib/native-xml.mjs'
 import {queryDevice,exchangeDevice} from '../../../lib/protocol.mjs'
-import {playlistReadback,parseStatus,controlCommand} from '../../../lib/control.mjs'
+import {playlistReadback,parseStatus,controlCommand,playbackName} from '../../../lib/control.mjs'
 export const runtime='nodejs'
 const validId=value=>typeof value==='string' && value.length>0 && value.length<=80 && !/[^a-zA-Z0-9-]/.test(value)
 const nativeName=value=>typeof value==='string' && value===value.trim() && value.length>0 && value.length<=200 && !/[\x00-\x1f\x7f;:,|/\\]/.test(value)
@@ -67,7 +67,7 @@ export async function publishPlaylist(device,playlist,studio,{play=false}={}) {
     const after=await exchangeDevice(device,'REMOTE_CONTROL;[Current_Playing_Playlist_Name]',2000)
     const prefix='[REMOTE_CONTROL][Current_Playing_Playlist_Name]'
     const current=after.frames.find(f=>f.startsWith(prefix))?.slice(prefix.length)
-    const active=after.reachable && [storedName,playlist.name,`[Internal]${storedName}`,`[Internal] ${playlist.name}`].includes(current)
+    const active=after.reachable && typeof current==='string' && playbackName(current)===playbackName(storedName)
     return {...outcome,playStatus:active?'verified':'unverified'}
   } finally {control.close()}
 }

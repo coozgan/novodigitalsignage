@@ -11,11 +11,28 @@ assert.match(xml,/Description="Studio &amp; &lt;test&gt;"/)
 assert.match(xml,/Playlist_UUID="u-1"/)
 assert.match(xml,/Model_Type="ds200" Interactive="false" Layout_Type="1"/)
 assert.equal((xml.match(/<Page /g)||[]).length,2)
-assert.match(xml,/ContentType="Media" SectionValid="true"/)
-assert.match(xml,/Content="a\.jpg"/)
+assert.match(xml,/ContentType="Media" SectionValid="1"/)
+assert.doesNotMatch(xml,/ Content="/)
+assert.equal((xml.match(/Orientation="0"/g)||[]).length,2)
+// Native saveXML nests model data inside Content, including its attachment manifest.
+const sections=[...xml.matchAll(/<Section\b[^>]*>\s*<Content\b[^>]*>([\s\S]*?)<\/Content>\s*<\/Section>/g)]
+assert.equal(sections.length,2)
+for(const [index,section] of sections.entries()) {
+  assert.match(section[1],new RegExp(`<AttachmentFiles>\\s*<File Name="${items[index].fileName}" Size="${items[index].size}"/>\\s*</AttachmentFiles>\\s*<MediaItem `))
+}
+assert.match(xml,/<\/Pages>\s*<Timeline Looping="true">\s*<Item Duration="7" Page="1"\/>\s*<Item Duration="12" Page="2"\/>\s*<\/Timeline>/)
+const portrait=nativePlaylistXml({name:'Portrait',width:1080,height:1920,items:[{...items[0],duration:7.6}]})
+assert.match(portrait,/Orientation="1"/)
+assert.match(portrait,/<Content[^>]* duration="8"/)
+assert.match(portrait,/<Item Duration="8" Page="1"\/>/)
+assert.match(xml,/<Content isVideoFillArea="false" Detect_Picture_Orientation="false" showType="Default" scaleType="FIT_CENTER" duration="7">/)
+assert.doesNotMatch(xml,/totalTime=/)
+const escaped=nativePlaylistXml({name:'Escaped',items:[{...items[0],fileName:'a&".jpg'}]})
+assert.match(escaped,/<File Name="a&amp;&quot;\.jpg" Size="1234"\/>/)
+assert.match(escaped,/<MediaItem src="a&amp;&quot;\.jpg"/)
 assert.match(xml,/MediaItem src="b\.mp4"[^>]*videoDuration="12"/)
 assert.match(xml,/MediaItem src="a\.jpg"[^>]*videoDuration="0"/)
-assert.match(xml,/Width="1920" Height="1080"/)
+assert.match(xml,/Width="1" Height="1"/)
 assert.ok(xml.endsWith('</NovoDS>\n'))
 
 const files=nativePlaylistFiles({

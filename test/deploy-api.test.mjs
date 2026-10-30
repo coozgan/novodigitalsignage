@@ -42,10 +42,10 @@ test.mock.module('../lib/protocol.mjs',{
         return {reachable:true,frames:[`[DOWNLOAD_SCHEDULE]${xml}`]}
       }
       if(command==='REMOTE_CONTROL;[Current_Playing_Playlist_Name]') {
-        const active=playing && playbackVerified?'[Internal][Internal] Loop':'[Internal] Baseline'
+        const active=playing && playbackVerified?'[Internal]Loop':'[Internal] Baseline'
         return {reachable:true,frames:[`[REMOTE_CONTROL][Current_Playing_Playlist_Name]${active}`]}
       }
-      assert.equal(command,'TCP_PLAY;[Internal] Loop','Unexpected device mutation')
+      assert.equal(command,'TCP_PLAY;Loop','Unexpected device mutation')
       if(nextPlayFails) {nextPlayFails=false;return {reachable:false,frames:[],detail:'Connection refused'}}
       playing=true
       return {reachable:true,frames:[]}
@@ -162,7 +162,7 @@ test('publish and play verifies playback with a fresh status readback',async()=>
   const body=await response.json()
   assert.equal(body.results[0].status,'published')
   assert.equal(body.results[0].playStatus,'verified')
-  assert.deepEqual(calls.slice(-2),[['exchange','new-device','TCP_PLAY;[Internal] Loop'],['exchange','new-device','REMOTE_CONTROL;[Current_Playing_Playlist_Name]']])
+  assert.deepEqual(calls.slice(-2),[['exchange','new-device','TCP_PLAY;Loop'],['exchange','new-device','REMOTE_CONTROL;[Current_Playing_Playlist_Name]']])
   assert.equal(await readFile(studioFile,'utf8'),JSON.stringify(state))
   assert.deepEqual(JSON.parse(await readFile(registryFile,'utf8')),devices)
   playing=false

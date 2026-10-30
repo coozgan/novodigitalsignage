@@ -1,12 +1,44 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {controlCommand,controlOutcome,parseStatus,parsePlaylists,volumeQuery,playlistReadback,deletePlaylist} from '../lib/control.mjs'
+import {controlCommand,controlOutcome,parseStatus,parsePlaylists,volumeQuery,playlistReadback,deletePlaylist,playbackName} from '../lib/control.mjs'
 import {POST} from '../app/api/devices/control/route.js'
 
 test('native control mappings use exact wire commands',()=> {
   assert.equal(volumeQuery,'REMOTE_CONTROL;[GET_Volume_Status]')
-  const cases=[['stop',undefined,'STOP;NULL'],['reboot',true,'REMOTE_CONTROL;[RC_SET_RebootDevice]NULL'],['orientation','Portrait-R','REMOTE_CONTROL;[SET_ScreenOrientation]Portrait-R'],['zoom',95,'REMOTE_CONTROL;[SET_ScreenZoomPercent]95'],['name','Canteen','REMOTE_CONTROL;[SET_Device_Name]Canteen'],['volume',15,'REMOTE_CONTROL;[SET_Volume_Current]15'],['play','[Internal] Example','TCP_PLAY;[Internal] Example']]
+  const cases=[['stop',undefined,'STOP;NULL'],['reboot',true,'REMOTE_CONTROL;[RC_SET_RebootDevice]NULL'],['orientation','Portrait-R','REMOTE_CONTROL;[SET_ScreenOrientation]Portrait-R'],['zoom',95,'REMOTE_CONTROL;[SET_ScreenZoomPercent]95'],['name','Canteen','REMOTE_CONTROL;[SET_Device_Name]Canteen'],['volume',15,'REMOTE_CONTROL;[SET_Volume_Current]15'],['play','[Internal] Example','TCP_PLAY;Example']]
   for(const [action,value,expected] of cases) assert.equal(controlCommand(action,value,{volume:{min:0,max:15},playlists:[{name:'[Internal] Example'}]}),expected)
+})
+test('play strips only a leading storage prefix after exact allowlist validation',()=> {
+  for(const prefix of ['[Internal]','[SDCard]','[FTP]']) {
+    for(const space of ['',' ','  \t']) {
+      const name=`${prefix}${space}Demo`
+      assert.equal(controlCommand('play',name,{playlists:[{name}]}),'TCP_PLAY;Demo')
+      assert.throws(()=>controlCommand('play','Demo',{playlists:[{name}]}))
+      assert.throws(()=>controlCommand('play',name,{playlists:[{name:'Demo'}]}))
+    }
+    const name=`${prefix} Demo`
+    assert.equal(controlCommand('delete',name,{confirmed:true,playlists:[{name}]}),`DELETE;${name}`)
+    for(const suffix of [';STOP','\r','\n','\0']) {
+      const name=`${prefix} Demo${suffix}`
+      assert.throws(()=>controlCommand('play',name,{playlists:[{name}]}))
+    }
+  }
+  for(const name of ['Demo','[Unknown] Demo','Demo [Internal] X',' [Internal] Demo','[internal] Demo','[Internal] [FTP] Demo']) {
+    const expected=name==='[Internal] [FTP] Demo'?'[FTP] Demo':name
+    assert.equal(controlCommand('play',name,{playlists:[{name}]}),`TCP_PLAY;${expected}`)
+  }
+  const longName=`[Internal] ${'a'.repeat(255)}`
+  assert.throws(()=>controlCommand('play',longName,{playlists:[{name:longName}]}))
+})
+test('playback readback normalization matches all storage prefixes without trimming playlist names',()=> {
+  for(const stored of ['Demo','[Internal] Demo','[SDCard]Demo','[FTP]  Demo']) {
+    for(const current of ['Demo','[Internal]Demo','[SDCard] Demo','[FTP]\tDemo']) {
+      assert.equal(playbackName(current),playbackName(stored))
+    }
+    for(const current of ['Other','Demo ','[Unknown] Demo','[internal] Demo']) {
+      assert.notEqual(playbackName(current),playbackName(stored))
+    }
+  }
 })
 test('reject unsafe, unknown and out of range arguments',()=> {
   for(const [action,value] of [['reset',true],['network','x'],['password','x'],['stop','NULL'],['reboot',false],['reboot','true'],['orientation','portrait'],['orientation',0],['zoom',79],['zoom',101],['zoom',90.5],['zoom','90'],['name',''],['name','a'.repeat(21)],['name',' x'],['name','x;STOP'],['name','x\n'],['name','x[GET_All]'],['volume',-1],['volume',16],['volume','1'],['play','missing'],['play','x;STOP']]) assert.throws(()=>controlCommand(action,value,{volume:{min:0,max:15},playlists:[{name:'x;STOP'}]}))

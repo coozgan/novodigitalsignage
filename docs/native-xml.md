@@ -7,7 +7,8 @@ Recovered from `/Applications/NovoDS Studio.app/Contents/MacOS/NovoDS Studio` (`
 Implemented in `nativePlaylistXml` and `nativePlaylistFiles` (`lib/native-xml.mjs`):
 
 - Root `<NovoDS Version="1.1" Description="..." Playlist_UUID="..." Model_Type="ds200" Interactive="false" Layout_Type="1" Show_ConnOverlay="false" ConnOverlay_Value="false">`.
-- Each studio sequence item becomes a full-screen `<Page>` with a single `ContentType="Media"` `<Section>` and `<MediaItem>` (`duration` in seconds, `videoDuration` populated for video items, `pdfPageRange=""` for images).
+- Each studio sequence item becomes a full-screen `<Page>` with `Row="1" Column="1"` and a single `ContentType="Media"` `<Section>`. Section dimensions are grid units (`Width="1" Height="1"`), not display pixels, as confirmed by `LandscapeTemplates::create_1`. Pixel dimensions produce a blank rendered page on ND-G1000 firmware 4.5.3.1845.
+- Orientation and section validity are numeric. A section contains `<Content>`, which nests `<AttachmentFiles>` and `<MediaItem>` (`duration` in seconds, `videoDuration` populated for video items, `pdfPageRange=""` for images). A root-level `<Timeline Looping="true">` maps ordered item durations to page IDs.
 - Upload order is `index.xml` followed by each unique referenced media file over TCP 20110 (`TCP_UPLOAD`, `TCP_UPLOAD_FILE_COUNT`, `TCP_UPLOAD_DONE`) and AES-256-CFB file transfer on TCP 20117 (`lib/deploy.mjs`).
 - AES key derivation uses the player's live `GET_Device_Name` and `GET_Version` BSP string (`ND-G1000-0132`). Readback verifies the playlist appears in `GET_PLAYLISTS;NULL` (including the `[Internal] ` prefix).
 
@@ -28,6 +29,8 @@ Implemented in `nativeScheduleXml`, `nativeSchedulePayload`, and `nativeSchedule
 
 ## Publish and play
 
-After playlist upload and listing verification, send `TCP_PLAY;<storedName>`, then verify with `REMOTE_CONTROL;[Current_Playing_Playlist_Name]`. `GET_All` does not include playback status. Firmware can return a repeated `[Internal]` prefix when the stored name includes it.
+After playlist upload and listing verification, send `TCP_PLAY;<bareName>` without the listing's storage prefix, then verify with `REMOTE_CONTROL;[Current_Playing_Playlist_Name]`. `GET_All` does not include playback status. Playback-name readback proves the selection only, not visible rendering. Live screenshots are required to verify the rendered content.
 
 Live Device 2 verification passed for playlist publish-and-play and weekly schedule publication. Restored the captured `SY2026-2027` schedule (five alarms), all 12 existing playlists, and `[Internal]SY26-27 (19Oct-6Nov)` playback. The existing `test` playlist was preserved.
+
+Subsequent rendering repair: redeployed `test` on FRONTOFFICE (`192.168.80.100`) with grid-unit sections. Hardware TCP captures now show moving particles from its video instead of a blank page. Three sequential screenshot API requests returned HTTP 200 with distinct JPEG SHA-256 values (`a4bc55cb…`, `f51da51a…`, `a694c53b…`). Screenshot capture tries direct TCP first, without UDP start/stop, because triggering the push service can return the old school slide. The legacy callback fallback is not proof of freshness on this firmware. Captured video frames have a green cast compared with the native Quick Look source thumbnail, so color fidelity is not established by these checks.
