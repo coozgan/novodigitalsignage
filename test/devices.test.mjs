@@ -108,6 +108,61 @@ test('persistent registry and public device endpoints without hardware traffic',
       assert.equal(connections.length,count)
     } finally { t.mock.restoreAll() }
   })
+  await t.test('removes only the selected entry across restart without hardware traffic',async()=> {
+    const before=await stored()
+    const device=before.find(d=>d.ip==='10.20.30.40')
+    t.mock.method(net,'connect',()=>{throw new Error('Removal must not contact hardware')})
+    t.mock.method(dgram,'createSocket',()=>{throw new Error('Removal must not contact hardware')})
+    try {
+      const response=await api.POST(request({action:'remove',deviceId:device.id,confirmed:true}))
+      assert.equal(response.status,200)
+      assert.deepEqual(await response.json(),{device})
+      const expected=before.filter(d=>d.id!==device.id)
+      assert.deepEqual(await stored(),expected)
+      assert.deepEqual(registry.devices,expected)
+      await assert.rejects(registry.findDevice(device.id),/Unknown device/)
+      const output=execFileSync(process.execPath,['--input-type=module','-e',`import {loadDevices} from './lib/devices.mjs'; console.log(JSON.stringify(await loadDevices()))`],{cwd:process.cwd(),env:{...process.env,NOVODS_DATA_DIR:dir},encoding:'utf8'})
+      assert.deepEqual(JSON.parse(output),expected)
+    } finally { t.mock.restoreAll() }
+  })
+  await t.test('requires exact confirmation, valid IDs and fields, and same origin without mutation',async()=> {
+    const deviceId=(await stored())[0].id
+    const before=await readFile(file,'utf8')
+    for(const confirmed of [undefined,false,'true',1,null]) {
+      assert.equal((await api.POST(request({action:'remove',deviceId,confirmed}))).status,400)
+    }
+    for(const id of [undefined,null,123,{},[],true,'',' ','bad\nname','x'.repeat(201),'missing']) {
+      assert.equal((await api.POST(request({action:'remove',deviceId:id,confirmed:true}))).status,400)
+    }
+    assert.equal((await api.POST(request({action:'remove',deviceId,confirmed:true,ip:'10.0.0.1'}))).status,400)
+    assert.equal((await api.POST(request({action:'remove',deviceId,confirmed:true},'https://evil.example'))).status,400)
+    await assert.rejects(registry.removeDevice('missing'),/Unknown device/)
+    for(const id of [null,123,'',' ','bad\nname','x'.repeat(201)]) await assert.rejects(registry.removeDevice(id),/Invalid device ID/)
+    assert.equal(await readFile(file,'utf8'),before)
+  })
+  await t.test('serializes concurrent additions and removals without losing entries or metadata',async()=> {
+    const before=await stored()
+    const removed=before.slice(1,7)
+    const results=await Promise.all(removed.flatMap((device,i)=>[
+      api.POST(request({action:'remove',deviceId:device.id,confirmed:true})),
+      api.POST(request({action:'add',name:`Concurrent ${i}`,ip:`10.42.0.${i+1}`})),
+    ]))
+    assert.deepEqual(results.map(r=>r.status),removed.flatMap(()=>[200,201]))
+    const added=await Promise.all(results.filter((_,i)=>i%2===1).map(async r=>(await r.json()).device))
+    assert.deepEqual(await stored(),[...before.filter(d=>!removed.some(r=>r.id===d.id)),...added])
+    const id=(await stored()).at(-1).id
+    const duplicate=await Promise.all([1,2].map(()=>api.POST(request({action:'remove',deviceId:id,confirmed:true}))))
+    assert.deepEqual(duplicate.map(r=>r.status).sort(),[200,400])
+    assert.deepEqual(await readdir(dir),['devices.json'])
+  })
+  await t.test('removing every entry leaves the registry empty across restart',async()=> {
+    for(const device of await stored()) assert.deepEqual(await registry.removeDevice(device.id),device)
+    assert.deepEqual(await stored(),[])
+    assert.deepEqual(await registry.loadDevices(),[])
+    const output=execFileSync(process.execPath,['--input-type=module','-e',`import {loadDevices} from './lib/devices.mjs'; console.log(JSON.stringify(await loadDevices()))`],{cwd:process.cwd(),env:{...process.env,NOVODS_DATA_DIR:dir},encoding:'utf8'})
+    assert.deepEqual(JSON.parse(output),[])
+    assert.deepEqual(registry.devices,[])
+  })
   await t.test('never reseeds empty or corrupted existing files',async()=> {
     await writeFile(file,'[]')
     assert.deepEqual(await registry.loadDevices(),[])
