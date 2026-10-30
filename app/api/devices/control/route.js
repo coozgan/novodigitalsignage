@@ -1,13 +1,9 @@
-import {devices,queryDevice,exchangeDevice} from '../../../../lib/protocol.mjs'
+import {queryDevice,exchangeDevice} from '../../../../lib/protocol.mjs'
+import {findDevice} from '../../../../lib/devices.mjs'
 import {mutationGuard,errorResponse} from '../../../../lib/http.mjs'
 import {parseStatus,parsePlaylists,controlCommand,controlOutcome,volumeQuery} from '../../../../lib/control.mjs'
 export const runtime='nodejs'
 export const dynamic='force-dynamic'
-function findDevice(id) {
-  const device=devices.find(d=>d.id===id)
-  if(!device) throw new Error('Unknown device')
-  return device
-}
 async function readStatus(device) {
   const status=await queryDevice(device,'status')
   const volume=await exchangeDevice(device,volumeQuery)
@@ -15,7 +11,7 @@ async function readStatus(device) {
 }
 export async function GET(request) {
   try {
-    const device=findDevice(new URL(request.url).searchParams.get('deviceId'))
+    const device=await findDevice(new URL(request.url).searchParams.get('deviceId'))
     const current=await readStatus(device)
     const playlists=await queryDevice(device,'playlists')
     return Response.json({...current,playlists:parsePlaylists(playlists.frames)})
@@ -26,7 +22,7 @@ export async function POST(request) {
     mutationGuard(request)
     const body=await request.json()
     if(!body || Array.isArray(body) || Object.keys(body).some(k=>!['deviceId','action','value'].includes(k))) throw new Error('Invalid control request')
-    const {deviceId,action,value}=body, device=findDevice(deviceId)
+    const {deviceId,action,value}=body, device=await findDevice(deviceId)
     const context={}
     if(action==='play') context.playlists=parsePlaylists((await queryDevice(device,'playlists')).frames)
     if(action==='volume') context.volume=parseStatus((await exchangeDevice(device,volumeQuery)).frames).volume
