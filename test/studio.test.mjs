@@ -110,6 +110,14 @@ test('serves rendered Studio UI and live API over Next.js production server', as
     const duplicate=await fetch(`${base}/api/devices`,{method:'POST',headers,body:JSON.stringify({action:'add',name:'Duplicate',ip:'192.168.254.254'})})
     assert.equal(duplicate.status,400)
     assert.deepEqual(JSON.parse(await readFile(path.join(dir,'devices.json'),'utf8')),registry)
+    const added=registry.find(d=>d.ip==='192.168.254.254')
+    const unconfirmed=await fetch(`${base}/api/devices`,{method:'POST',headers,body:JSON.stringify({action:'remove',deviceId:added.id})})
+    assert.equal(unconfirmed.status,400)
+    assert.deepEqual(JSON.parse(await readFile(path.join(dir,'devices.json'),'utf8')),registry)
+    const removed=await fetch(`${base}/api/devices`,{method:'POST',headers,body:JSON.stringify({action:'remove',deviceId:added.id,confirmed:true})})
+    assert.equal(removed.status,200)
+    assert.deepEqual(JSON.parse(await readFile(path.join(dir,'devices.json'),'utf8')),registry.filter(d=>d.id!==added.id))
+    assert.deepEqual(await (await fetch(`${base}/api/studio`)).json(),reloaded)
   } finally {
     server.kill('SIGTERM')
   }
