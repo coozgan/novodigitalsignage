@@ -1,8 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {emptyDeviceSchedule} from '../lib/device-schedule.mjs'
-let xml=emptyDeviceSchedule,calls=[]
-test.mock.module('../lib/protocol.mjs',{namedExports:{exchangeDevice:async(_device,command)=>{calls.push(command);return {reachable:true,frames:['[DOWNLOAD_SCHEDULE]'+xml]}}}})
+let xml=emptyDeviceSchedule,calls=[],applyUpload=false
+test.mock.module('../lib/protocol.mjs',{namedExports:{exchangeDevice:async(_device,command)=>{calls.push(command);if(applyUpload && command.startsWith('TCP_SCHEDULE;')) xml=command.slice('TCP_SCHEDULE;'.length);return {reachable:true,frames:['[DOWNLOAD_SCHEDULE]'+xml]}}}})
 test.mock.module('../lib/devices.mjs',{namedExports:{findDevice:async id=>{if(id!=='d') throw new Error('Unknown device');return {id,ip:'192.168.1.2'}}}})
 const {GET,DELETE}=await import('../app/api/devices/schedule/route.js')
 const request=(body,origin)=>new Request('http://localhost/api/devices/schedule',{method:'DELETE',headers:{'content-type':'application/json',...(origin?{origin}:{})},body:JSON.stringify(body)})
@@ -43,4 +43,29 @@ test('unchanged device schedule returns 207, never a verified deletion',async()=
   const response=await DELETE(request({deviceId:'d',confirmed:true,revision:before.revision}))
   assert.equal(response.status,207)
   assert.equal((await response.json()).verified,false)
+})
+test('entry selection rejects invalid values before hardware and deletes only one row',async()=> {
+  for(const entryIndex of [null,'0',-1,0.5]) {
+    calls=[]
+    assert.equal((await DELETE(request({deviceId:'d',confirmed:true,entryIndex}))).status,400)
+    assert.equal(calls.length,0)
+  }
+  const first='<Alarm ID="same" Enabled="true" Description="First"/>'
+  const second='<Alarm ID="same" Enabled="false" Description="Second"/>'
+  xml=`<AlarmManager Name="Keep" DefaultPlaylist="Default"><Alarms>${first}${second}</Alarms></AlarmManager>`
+  const original=xml
+  const before=await (await GET(new Request('http://localhost/api/devices/schedule?deviceId=d'))).json()
+  calls=[]
+  assert.equal((await DELETE(request({deviceId:'d',confirmed:true,revision:before.revision,entryIndex:2}))).status,400)
+  assert.deepEqual(calls,['DOWNLOAD_SCHEDULE;NULL'])
+  applyUpload=true
+  try {
+    const response=await DELETE(request({deviceId:'d',confirmed:true,revision:before.revision,entryIndex:0}))
+    assert.equal(response.status,200)
+    const result=await response.json()
+    assert.equal(result.verified,true)
+    assert.equal(result.xml,original.replace(first,''))
+    assert.equal(result.schedule.defaultPlaylist,'Default')
+    assert.equal(result.schedule.alarms[0].description,'Second')
+  } finally {applyUpload=false}
 })

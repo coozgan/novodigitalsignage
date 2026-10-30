@@ -1,8 +1,30 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {parseDeviceSchedule,readDeviceSchedule,deleteDeviceSchedule,emptyDeviceSchedule} from '../lib/device-schedule.mjs'
+import {parseDeviceSchedule,readDeviceSchedule,deleteDeviceSchedule,emptyDeviceSchedule,removeScheduleEntry} from '../lib/device-schedule.mjs'
 const xml=`<?xml version='1.0' encoding='utf-8'?><AlarmManager Name='Week &amp; welcome' DefaultPlaylist='' Description='A'><Alarms><Alarm ID='1' Enabled='true' Type='3' DateTime='1793341500000' StartTime='-1' EndTime='-1' Duration='60' WeekMask='16'><Play Repeat='true'><Item Playlist='test' Duration='-1'/></Play></Alarm></Alarms></AlarmManager>`
 const reply=xml=>({reachable:true,frames:['[DOWNLOAD_SCHEDULE]'+xml]})
+const multi='<AlarmManager Name="Multi" DefaultPlaylist="Baseline" Extra_Field="keep"><Alarms><Alarm ID="duplicate" Enabled="true" Description="first"/><Alarm ID="duplicate" Enabled="false" Description="second" Interval_Hourly="2"><Play Repeat="true"><Item Playlist="Keep" Duration="15" Publishid="original"/></Play></Alarm></Alarms></AlarmManager>'
+test('selective deletion removes exactly the indexed entry, preserving untouched XML',()=> {
+  const updated=removeScheduleEntry(multi,0)
+  assert.equal(updated,multi.replace('<Alarm ID="duplicate" Enabled="true" Description="first"/>',''))
+  assert.equal(parseDeviceSchedule(updated).alarms[0].description,'second')
+  assert.equal(parseDeviceSchedule(updated).defaultPlaylist,'Baseline')
+  assert.equal(parseDeviceSchedule(removeScheduleEntry(updated,0)).alarms.length,0)
+  for(const index of [-1,2,0.5,'0',null]) assert.throws(()=>removeScheduleEntry(multi,index))
+})
+test('selective readback must preserve other entries and default assignment, not merely omit selection',async()=> {
+  const before=await readDeviceSchedule({},async()=>reply(multi))
+  const expected=removeScheduleEntry(multi,0)
+  for(const actual of [expected,expected.replace('Baseline','Changed'),expected.replace('Interval_Hourly="2"','Interval_Hourly="3"'),emptyDeviceSchedule,multi]) {
+    const calls=[]
+    const result=await deleteDeviceSchedule({},{confirmed:true,revision:before.revision,entryIndex:0},async(_d,c)=> {
+      calls.push(c)
+      if(c.startsWith('TCP_SCHEDULE;')) {assert.equal(c,'TCP_SCHEDULE;'+expected);return {reachable:true,frames:[]}}
+      return reply(calls.length===1?multi:actual)
+    })
+    assert.equal(result.verified,actual===expected)
+  }
+})
 test('native schedule parses quoted attributes, entities, recurring entries and empty schedule',()=> {
   const schedule=parseDeviceSchedule(xml)
   assert.equal(schedule.name,'Week & welcome')

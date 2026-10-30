@@ -35,6 +35,8 @@ The Devices dashboard has an on-demand device schedule viewer, distinct from loc
 
 Read-only API and XML download were checked against FRONTOFFICE's `TESTNOW` schedule. Native clear mapping and successful/failed verification paths are covered offline. The existing hardware schedule was not deleted as a test.
 
+The dashboard now shows selectable alarm rows. Add zero-based `entryIndex` to the confirmed, revision-checked DELETE request to remove one entry. Only that Alarm's original XML span is removed before reupload, preserving all other entries, attributes and the default playlist assignment, even when alarm IDs are duplicated. Readback must match the entire expected document, not just the missing entry, to report verified. Omit `entryIndex` only for the legacy whole-schedule clear API. Single-entry hardware deletion has not been exercised against the user's live schedule.
+
 ## Publish and play
 
 After playlist upload and listing verification, send `TCP_PLAY;<bareName>` without the listing's storage prefix, then verify with `REMOTE_CONTROL;[Current_Playing_Playlist_Name]`. `GET_All` does not include playback status. Playback-name readback proves the selection only, not visible rendering. Live screenshots are required to verify the rendered content.

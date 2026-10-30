@@ -17,7 +17,8 @@ export async function DELETE(request) {
   try {
     mutationGuard(request)
     const body=await request.json()
-    if(!body || Array.isArray(body) || Object.keys(body).some(k=>!['deviceId','confirmed','revision'].includes(k))) throw new Error('Invalid schedule deletion request')
+    if(!body || Array.isArray(body) || Object.keys(body).some(k=>!['deviceId','confirmed','revision','entryIndex'].includes(k))) throw new Error('Invalid schedule deletion request')
+    if(Object.hasOwn(body,'entryIndex') && (!Number.isSafeInteger(body.entryIndex) || body.entryIndex<0)) throw new Error('Invalid schedule entry selection')
     if(body.confirmed!==true) throw new Error('Confirm device schedule deletion first')
     const device=await findDevice(body.deviceId)
     const result=await deleteDeviceSchedule(device,body,exchangeDevice)
