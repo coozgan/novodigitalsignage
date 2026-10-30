@@ -162,7 +162,7 @@ export default function Studio() {
             <div className="device-actions"><a className="button" href={`/api/devices/screenshot?deviceId=${encodeURIComponent(device.id)}`} target="_blank" rel="noreferrer">Screenshot</a>{['status', 'playlists'].map(action => <button key={action} disabled={!!busy} onClick={() => run('Reading device', async () => { const data = await request('/api/devices', json({ deviceId: device.id, action })); setReading({ title: `${device.name}: ${action}`, data }); })}>{action === 'status' ? 'Read status' : 'Read playlists'}<Icon name="arrow" size={15}/></button>)}</div>
             <DeviceControls device={device} onChanged={loadDevices}/>
           </article>)}</div>
-          {!devices.length && <div className="empty-state"><Icon name="Devices" size={36}/><h3>{deviceLoaded ? 'No players returned' : 'Waiting for device discovery'}</h3><p>Refresh to query the configured DS200 devices. No device status is simulated.</p></div>}
+          {!devices.length && <div className="empty-state"><Icon name="Devices" size={36}/><h3>{deviceLoaded ? 'No players added' : 'Loading your players'}</h3><p>Add a device by its LAN IP address, or refresh to query your saved players. No device status is simulated.</p></div>}
           <div className="protocol-note"><span className="note-icon"><Icon name="shield" size={22}/></span><div><h3>Connected does not mean deployment-ready.</h3><p>Device controls communicate directly over the local network. Close native NovoDS Studio before taking screenshots. Status connectivity does not verify content deployment.</p></div><span className="badge amber">Local network</span></div>
         </>}
         {tab === 'Library' && <>
