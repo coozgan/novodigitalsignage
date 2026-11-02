@@ -25,7 +25,9 @@ docker compose ps
 
 Open **http://HOST_LAN_IP:3000** from a browser, replacing `HOST_LAN_IP` with that computer's LAN IP. The image builds for the host architecture, including x86-64 PCs and ARM64 machines.
 
-Allow inbound TCP 3000 only from trusted clients and inbound UDP 20116 from the device network in the host firewall. Device communication requires outbound TCP 20110 and UDP 20116, plus TCP 80 for screenshot/media operations. Docker publishes the fixed UDP reply port for discovery. If Docker Desktop or a firewall prevents UDP replies, device status/discovery can time out even when the web UI works. Prefer a Linux Docker host for device-network troubleshooting. Do not run another NovoDS discovery listener on host UDP port 20116.
+If port 3000 is already occupied, set `NOVODS_PORT` in a `.env` file next to `compose.yaml`, for example `NOVODS_PORT=3100`, then use that port in the browser and firewall rules.
+
+Allow inbound TCP 3000 only from trusted clients, and inbound UDP 20116 and TCP 20114 from the device network in the host firewall. Device communication requires outbound TCP 20110 (control), TCP 20117 (uploads), TCP 20114 (screenshots), and UDP 20116, 20112, and 20109 (discovery/capture). Docker publishes the fixed discovery reply and screenshot callback ports. If Docker Desktop or a firewall prevents device callbacks, discovery or screenshots can time out even when the web UI works. Prefer a Linux Docker host for device-network troubleshooting. Do not run another NovoDS listener on host UDP 20116 or TCP 20114.
 
 ## Keep existing media, playlists, schedules, and devices
 
@@ -83,3 +85,12 @@ docker compose ps
 ```
 
 On a test deployment, upload a small image and create a playlist, then run `docker compose down` followed by `docker compose up -d`. Confirm both remain. This verifies the volume without touching a real device. Check actual device connectivity separately from the target host.
+
+For an automated check using a fresh isolated volume (requires Node.js 22 on the host):
+
+```sh
+NOVODS_PORT=3100 docker compose -p novods-shipping up -d --build --wait
+node scripts/docker-smoke.mjs http://127.0.0.1:3100 novods-shipping
+```
+
+The check uploads a test image, saves a playlist, checks cross-origin rejection and media ranges, then recreates the container and verifies persistence. It requires empty studio data and leaves its test data in the isolated volume. Do not point it at a production deployment. Stop other Studio containers first because the device callback ports cannot be shared.
