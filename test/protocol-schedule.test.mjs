@@ -5,7 +5,7 @@ import {mkdtemp,rm} from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import net from 'node:net'
-import {emptyDeviceSchedule} from '../lib/device-schedule.mjs'
+import {emptyDeviceSchedule,emptyPlaylistManifest} from '../lib/device-schedule.mjs'
 
 const dir=await mkdtemp(path.join(os.tmpdir(),'novods-schedule-wire-'))
 process.env.NOVODS_DATA_DIR=dir
@@ -23,7 +23,7 @@ test('schedule transport preserves multiline XML and supports schedules larger t
     queueMicrotask(()=>socket.emit('connect'))
     return socket
   })
-  for(const xml of [emptyDeviceSchedule,'<AlarmManager>\r\n<Alarms>'+Array.from({length:200},(_,i)=>`<Alarm ID="${i}" Enabled="true" Description="keep this entry"/>`).join('\n')+'</Alarms>\n</AlarmManager>']) {
+  for(const xml of [emptyDeviceSchedule,'<AlarmManager>\r\n<Alarms>'+Array.from({length:200},(_,i)=>`<Alarm ID="${i}" Enabled="true" Description="keep this entry"/>`).join('\n')+'</Alarms>\n</AlarmManager>',emptyDeviceSchedule+emptyPlaylistManifest]) {
     const command='TCP_SCHEDULE;'+xml
     await exchangeDevice(device,command)
     assert.equal(sent.at(-1),command)
@@ -36,6 +36,15 @@ test('invalid schedules and non-schedule command injection never reach the netwo
   t.mock.method(net,'connect',()=>{connections++;throw new Error('Must not connect')})
   for(const command of ['STOP;NULL\n','STOP;NULL\r','STOP;\0','X'.repeat(8193),'TCP_SCHEDULE;<AlarmManager>','TCP_SCHEDULE;'+emptyDeviceSchedule+'\0','TCP_SCHEDULE;<!DOCTYPE x>'+emptyDeviceSchedule,'TCP_SCHEDULE;'+emptyDeviceSchedule+' '.repeat(1024*1024)]) {
     await assert.rejects(exchangeDevice(device,command),/Invalid device command|schedule|Schedule/)
+  }
+  assert.equal(connections,0)
+})
+
+test('schedule manifest validation rejects altered, repeated and trailing payloads',async t=> {
+  let connections=0
+  t.mock.method(net,'connect',()=>{connections++;throw new Error('Must not connect')})
+  for(const suffix of [emptyPlaylistManifest+'extra',emptyPlaylistManifest+emptyPlaylistManifest,emptyPlaylistManifest.replace('<Playlists/>','<!DOCTYPE x><Playlists/>'),emptyPlaylistManifest+'\0']) {
+    await assert.rejects(exchangeDevice(device,'TCP_SCHEDULE;'+emptyDeviceSchedule+suffix))
   }
   assert.equal(connections,0)
 })

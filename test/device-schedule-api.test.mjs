@@ -1,8 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {emptyDeviceSchedule} from '../lib/device-schedule.mjs'
+import {emptyDeviceSchedule,emptyPlaylistManifest} from '../lib/device-schedule.mjs'
 let xml=emptyDeviceSchedule,calls=[],applyUpload=false
-test.mock.module('../lib/protocol.mjs',{namedExports:{exchangeDevice:async(_device,command)=>{calls.push(command);if(applyUpload && command.startsWith('TCP_SCHEDULE;')) xml=command.slice('TCP_SCHEDULE;'.length);return {reachable:true,frames:['[DOWNLOAD_SCHEDULE]'+xml]}}}})
+test.mock.module('../lib/protocol.mjs',{namedExports:{exchangeDevice:async(_device,command)=>{calls.push(command);if(applyUpload && command.startsWith('TCP_SCHEDULE;')) xml=command.slice('TCP_SCHEDULE;'.length).split('[.PLS_FILES.]')[0];return {reachable:true,frames:['[DOWNLOAD_SCHEDULE]'+xml]}}}})
 test.mock.module('../lib/devices.mjs',{namedExports:{findDevice:async id=>{if(id!=='d') throw new Error('Unknown device');return {id,ip:'192.168.1.2'}}}})
 const {GET,DELETE}=await import('../app/api/devices/schedule/route.js')
 const request=(body,origin)=>new Request('http://localhost/api/devices/schedule',{method:'DELETE',headers:{'content-type':'application/json',...(origin?{origin}:{})},body:JSON.stringify(body)})
@@ -35,7 +35,7 @@ test('API removal returns verified only after empty schedule readback',async()=>
   const response=await DELETE(request({deviceId:'d',confirmed:true,revision:before.revision}))
   assert.equal(response.status,200)
   assert.equal((await response.json()).verified,true)
-  assert.deepEqual(calls,['DOWNLOAD_SCHEDULE;NULL','TCP_SCHEDULE;'+emptyDeviceSchedule,'DOWNLOAD_SCHEDULE;NULL'])
+  assert.deepEqual(calls,['DOWNLOAD_SCHEDULE;NULL','TCP_SCHEDULE;'+emptyDeviceSchedule+emptyPlaylistManifest,'DOWNLOAD_SCHEDULE;NULL'])
 })
 test('unchanged device schedule returns 207, never a verified deletion',async()=> {
   xml='<AlarmManager Name="Still present"><Alarms><Alarm Enabled="true" Type="3"/></Alarms></AlarmManager>'

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import {parseDeviceSchedule,readDeviceSchedule,deleteDeviceSchedule,emptyDeviceSchedule,removeScheduleEntry} from '../lib/device-schedule.mjs'
 const xml=`<?xml version='1.0' encoding='utf-8'?><AlarmManager Name='Week &amp; welcome' DefaultPlaylist='' Description='A'><Alarms><Alarm ID='1' Enabled='true' Type='3' DateTime='1793341500000' StartTime='-1' EndTime='-1' Duration='60' WeekMask='16'><Play Repeat='true'><Item Playlist='test' Duration='-1'/></Play></Alarm></Alarms></AlarmManager>`
 const reply=xml=>({reachable:true,frames:['[DOWNLOAD_SCHEDULE]'+xml]})
+const envelope=xml=>xml+'[.PLS_FILES.]<?xml version="1.0" encoding="utf-8"?><Playlists/>'
 const multi='<AlarmManager Name="Multi" DefaultPlaylist="Baseline" Extra_Field="keep"><Alarms><Alarm ID="duplicate" Enabled="true" Description="first"/><Alarm ID="duplicate" Enabled="false" Description="second" Interval_Hourly="2"><Play Repeat="true"><Item Playlist="Keep" Duration="15" Publishid="original"/></Play></Alarm></Alarms></AlarmManager>'
 test('selective deletion removes exactly the indexed entry, preserving untouched XML',()=> {
   const updated=removeScheduleEntry(multi,0)
@@ -19,7 +20,7 @@ test('selective readback must preserve other entries and default assignment, not
     const calls=[]
     const result=await deleteDeviceSchedule({},{confirmed:true,revision:before.revision,entryIndex:0},async(_d,c)=> {
       calls.push(c)
-      if(c.startsWith('TCP_SCHEDULE;')) {assert.equal(c,'TCP_SCHEDULE;'+expected);return {reachable:true,frames:[]}}
+      if(c.startsWith('TCP_SCHEDULE;')) {assert.equal(c,'TCP_SCHEDULE;'+envelope(expected));return {reachable:true,frames:[]}}
       return reply(calls.length===1?multi:actual)
     })
     assert.equal(result.verified,actual===expected)
@@ -56,11 +57,11 @@ test('clear sends native empty schedule only and verifies readback, not an ACK',
     const calls=[]
     const result=await deleteDeviceSchedule({},{confirmed:true,revision:before.revision},async(_d,c)=> {
       calls.push(c)
-      if(c.startsWith('TCP_SCHEDULE;')) {assert.equal(c,'TCP_SCHEDULE;'+emptyDeviceSchedule);return {reachable:true,frames:['OK']}}
+      if(c.startsWith('TCP_SCHEDULE;')) {assert.equal(c,'TCP_SCHEDULE;'+envelope(emptyDeviceSchedule));return {reachable:true,frames:['OK']}}
       if(calls.length===1) return reply(xml)
       return state==='empty'?reply(emptyDeviceSchedule):state==='unchanged'?reply(xml):state==='malformed'?reply('<AlarmManager>'):{reachable:false,frames:[]}
     })
     assert.equal(result.verified,state==='empty')
-    assert.deepEqual(calls,['DOWNLOAD_SCHEDULE;NULL','TCP_SCHEDULE;'+emptyDeviceSchedule,'DOWNLOAD_SCHEDULE;NULL'])
+    assert.deepEqual(calls,['DOWNLOAD_SCHEDULE;NULL','TCP_SCHEDULE;'+envelope(emptyDeviceSchedule),'DOWNLOAD_SCHEDULE;NULL'])
   }
 })
