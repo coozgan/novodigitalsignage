@@ -1,0 +1,12 @@
+.git
+node_modules
+.next
+data
+.jcode
+.serena
+.playwright-mcp
+.impeccable
+.DS_Store
+*.log
+.env*
+*.tar.gz

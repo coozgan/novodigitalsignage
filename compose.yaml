@@ -1,0 +1,17 @@
+services:
+  novods-studio:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+      # Devices reply to this fixed UDP port during discovery.
+      - "20116:20116/udp"
+    volumes:
+      - studio-data:/data
+    logging:
+      options:
+        max-size: 10m
+        max-file: "3"
+
+volumes:
+  studio-data:
