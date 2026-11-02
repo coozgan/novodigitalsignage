@@ -13,7 +13,7 @@ await writeFile(path.join(dir,'media',mediaFile),mediaBytes)
 const devices=[{id:'new-device',name:'Lobby',ip:'10.0.0.9'},{id:'other-device',name:'Cafe',ip:'10.0.0.10'}]
 const state={revision:1,media:[{id:'m-1',type:'image',size:mediaBytes.length,fileName:mediaFile}],
   playlists:[{id:'pl-1',name:'Loop',width:1920,height:1080,items:[{mediaId:'m-1',duration:15}]},{id:'pl-2',name:'bad:name',items:[{mediaId:'m-1',duration:15}]}],
-  schedules:[{id:'sc-1',name:'Morning',playlistId:'pl-1',start:'08:00',end:'12:00',days:[1,2,3,4,5]}]}
+  schedules:[{id:'sc-1',name:'Morning',playlistId:'pl-1',start:'08:00',end:'12:00',days:[1,2,3,4,5],timeZone:'Asia/Singapore'}]}
 await writeFile(registryFile,JSON.stringify(devices))
 await writeFile(studioFile,JSON.stringify(state))
 
@@ -135,6 +135,26 @@ test('publishes a schedule and verifies the downloaded native schedule',async()=
   ])
   assert.equal(await readFile(studioFile,'utf8'),JSON.stringify(state))
   assert.deepEqual(JSON.parse(await readFile(registryFile,'utf8')),devices)
+})
+
+test('one-time date survives publish/readback and missing timezone never contacts hardware',async()=> {
+  try {
+    const once={...state,schedules:[{...state.schedules[0],recurrence:'once',date:'2026-12-25',start:'14:59',end:'15:01',days:[]}]}
+    await writeFile(studioFile,JSON.stringify(once))
+    calls.length=0
+    const response=await POST(request({deviceIds:['new-device'],kind:'schedule',id:'sc-1'}))
+    assert.equal(response.status,200)
+    assert.match(scheduleXML,/Type="0"/)
+    assert.match(scheduleXML,new RegExp(`DateTime="${Date.parse('2026-12-25T06:59:00Z')}"`))
+    assert.match(scheduleXML,/Duration="120"/)
+    delete once.schedules[0].timeZone
+    await writeFile(studioFile,JSON.stringify(once))
+    calls.length=0
+    const rejected=await POST(request({deviceIds:['new-device'],kind:'schedule',id:'sc-1'}))
+    assert.equal(rejected.status,207)
+    assert.match(JSON.stringify(await rejected.json()),/confirm its timezone/)
+    assert.equal(calls.length,0)
+  } finally {await writeFile(studioFile,JSON.stringify(state))}
 })
 
 test('schedule upload and mismatching readback fail per device without changing persisted data',async()=> {

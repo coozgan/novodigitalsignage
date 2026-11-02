@@ -61,14 +61,14 @@ assert.equal(validNativeName('Studio_Test'),true)
 assert.equal(validNativeName('a/b'),false)
 assert.equal(validNativeName('..\\evil'),false)
 
-const schedule={id:'sc-1',name:'Weekday & welcome',start:'08:30',end:'12:00',days:[1,2,3,4,5]}
-const now=new Date(2026,9,30,10,0)
+const schedule={id:'sc-1',name:'Weekday & welcome',start:'08:30',end:'12:00',days:[1,2,3,4,5],timeZone:'Asia/Singapore'}
+const now=new Date('2026-10-30T02:00:00Z')
 const scheduleXml=nativeScheduleXml({schedule,playlistName:'Studio & <test>',now})
 assert.match(scheduleXml,/Type="3"/)
 assert.match(scheduleXml,/WeekMask="31"/)
 assert.match(scheduleXml,/Duration="12600"/)
 assert.match(scheduleXml,/StartTime="-1" EndTime="-1"/)
-assert.match(scheduleXml,new RegExp(`DateTime="${new Date(2026,9,30,8,30).getTime()}"`))
+assert.match(scheduleXml,new RegExp(`DateTime="${Date.parse('2026-10-30T00:30:00Z')}"`))
 assert.match(scheduleXml,/Playlist="Studio &amp; &lt;test&gt;"/)
 assert.ok(nativeScheduleMatches(scheduleXml.replaceAll('"',"'"),scheduleXml))
 assert.ok(!nativeScheduleMatches(scheduleXml.replace('WeekMask="31"','WeekMask="127"'),scheduleXml))

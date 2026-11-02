@@ -1,6 +1,14 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {readFile} from 'node:fs/promises'
+test('schedule editor offers one-time date with explicit browser timezone',async()=> {
+  const page=await readFile(new URL('../app/page.js',import.meta.url),'utf8')
+  assert.match(page,/<option value="once">Specific date \(one-time\)<\/option>/)
+  assert.match(page,/type="date" required/)
+  assert.match(page,/Intl.DateTimeFormat\(\).resolvedOptions\(\).timeZone/)
+  assert.match(page,/One-time · \{schedule.date\}/)
+  assert.doesNotMatch(page,/player local time|Times use the player/)
+})
 // Source-level wiring checks supplement the production build, not browser interaction coverage.
 test('device selection is only offered inside the publish dialog',async()=> {
   const page=await readFile(new URL('../app/page.js',import.meta.url),'utf8')

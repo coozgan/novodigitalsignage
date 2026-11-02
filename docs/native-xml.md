@@ -12,13 +12,15 @@ Implemented in `nativePlaylistXml` and `nativePlaylistFiles` (`lib/native-xml.mj
 - Upload order is `index.xml` followed by each unique referenced media file over TCP 20110 (`TCP_UPLOAD`, `TCP_UPLOAD_FILE_COUNT`, `TCP_UPLOAD_DONE`) and AES-256-CFB file transfer on TCP 20117 (`lib/deploy.mjs`).
 - AES key derivation uses the player's live `GET_Device_Name` and `GET_Version` BSP string (`ND-G1000-0132`). Readback verifies the playlist appears in `GET_PLAYLISTS;NULL` (including the `[Internal] ` prefix).
 
-## Weekly Schedule (`TCP_SCHEDULE;...`)
+## Weekly and specific-date schedules (`TCP_SCHEDULE;...`)
 
 Implemented in `nativeScheduleXml`, `nativeSchedulePayload`, and `nativeScheduleMatches` (`lib/native-xml.mjs`) from `AlarmParamsDialog2::accept` (`0x100357130`), `ScheduleUI::genarateXMLE` (`0x100178100`), `ScheduleUI::get_Upload_Content` (`0x10017c110`), and `Device::TCP_uploadSchedule` (`0x10012b640`):
 
-- Recurrence `Type`: `0` one-time, `1` hourly, `2` daily, `3` weekly, `4` monthly. Web studio schedules use `Type="3"`.
+- Recurrence `Type`: `0` one-time, `1` hourly, `2` daily, `3` weekly, `4` monthly. Web studio schedules use `Type="3"` for weekly or `Type="0"` for a specific date.
 - `WeekMask`: 7-bit mask in Monday-first checkbox order (`Mon=1`, `Tue=2`, `Wed=4`, `Thu=8`, `Fri=16`, `Sat=32`, `Sun=64`). Web studio days `0..6` (`Sun..Sat`) map with `1 << ((day + 6) % 7)`.
-- `DateTime`: epoch milliseconds (`QDateTime(currentDate, startTime).toMSecsSinceEpoch()`).
+- `DateTime`: epoch milliseconds for the selected wall time in the saved IANA `timeZone`, independent of the container timezone. Weekly rules use today's date in that timezone. One-time rules use the selected `YYYY-MM-DD` date. For example, 2026-11-02 14:59 in Asia/Singapore is 2026-11-02 06:59 UTC, not 14:59 UTC.
+- The editor captures the browser timezone. Existing schedules without a timezone must be edited and saved before publishing. Already-published rules are not changed automatically and require republishing. The player clock/timezone must match the intended location, especially for weekly recurrence.
+- Invalid calendar dates and ambiguous/nonexistent daylight-saving times are rejected. Scheduling remains same-day only. One-time playback has not yet been verified on physical hardware.
 - `Duration`: `end - start` in seconds (`hour * 3600 + minute * 60`).
 - `StartTime` and `EndTime`: `-1` when no recurrence date-range bounds are enabled.
 - Child `<Play Repeat="true"><Item Playlist="..." Duration="-1" Publishid="..."/></Play>`.
